@@ -1,0 +1,22 @@
+schema = "ag.agent-config.v1"
+project = "agfront"
+
+[models."ollama/qwen3.6:35b-a3b-coding-nvfp4"]
+
+[models."anthropic/claude-sonnet-5"]
+
+[profiles.local]
+harness = "agcode"
+model = "ollama/qwen3.6:35b-a3b-coding-nvfp4"
+
+[profiles.sonnet]
+harness = "claude_code"
+model = "anthropic/claude-sonnet-5"
+
+[profiles.stub]
+harness = "fake"
+model = "ollama/qwen3.6:35b-a3b-coding-nvfp4"
+
+[roles.front]
+profile = "sonnet"
+requires = []

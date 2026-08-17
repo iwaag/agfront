@@ -1,0 +1,25 @@
+[project]
+name = "agfront"
+version = "0.1.0"
+description = "The Developer's front agent: takes requests in Zulip and routes them to other agents"
+requires-python = ">=3.11"
+dependencies = ["pyagag"]
+
+[project.scripts]
+agfront-zulip-listener = "agfront.zulip_listener:main"
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agfront"]
+
+[tool.uv.sources]
+pyagag = { git = "https://github.com/iwaag/pyagag.git", branch = "main" }
