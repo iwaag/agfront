@@ -71,7 +71,7 @@ def test_every_role_carries_a_tool_grant(monkeypatch, tmp_path):
 
 def test_front_gets_no_shell():
     """Front routes; the work happens elsewhere. Its grant is the reading
-    tools plus `Write`, which exists for one file — `dispatch.md`."""
+    tools plus `Write`, which exists for one file — `create.md`."""
     grant = role_run.ROLE_ALLOWED_TOOLS["front"]
     assert "Bash" not in grant
     assert "Write" in grant
@@ -149,15 +149,15 @@ class Client:
         ]
 
 
-def test_a_stub_run_dispatches_through_the_real_harness_seam(monkeypatch, tmp_path):
+def test_a_stub_run_requests_through_the_real_harness_seam(monkeypatch, tmp_path):
     """The wiring proof: no `run_front` monkeypatch anywhere. The config pair,
     `run_harness`, the generation workspace and the command file are all real;
     only the harness process and Zulip are stubs."""
     stub_config(
         tmp_path,
         "cat > chatlog.seen\n"
-        "printf 'run-stub-1\\n\\nPlease advance the work.\\n' > dispatch.md\n"
-        "echo dispatching",
+        "printf 'A title image of a red dragon.\\n' > create.md\n"
+        "echo asking",
     )
     monkeypatch.setattr(role_run, "AGENTS_CONFIG", tmp_path / "agents.toml")
     monkeypatch.setattr(role_run, "AGENTS_LOCAL_CONFIG", tmp_path / "agents.local.toml")
@@ -178,21 +178,21 @@ def test_a_stub_run_dispatches_through_the_real_harness_seam(monkeypatch, tmp_pa
     zulip_listener.handle_topic(Client(posts), "front", "front-stub")
 
     assert (
-        zulip_listener.DISPATCH_CHANNEL,
-        "run-stub-1",
-        "Please advance the work.",
+        zulip_listener.OUTBOUND_CHANNEL,
+        "create-stub-1",
+        "A title image of a red dragon.",
     ) in posts
     # The reply into the front topic is the run's own answer plus where it went.
     assert posts[-1][2] == (
-        "dispatching\n\ndispatched to #general > run-stub-1; the reply will appear there"
+        "asking\n\nasked forge in #general > create-stub-1; the reply will appear there"
     )
     # The run really saw its prompt on stdin, and the prompt was the placement
     # line plus the guide this repository actually ships — not a fixture.
     workspace = tmp_path / "topics" / "front" / "front-stub" / "1" / "front"
     prompt = (workspace / "chatlog.seen").read_text()
     assert prompt.startswith("The chatlog is placed in the working directory.")
-    assert "run-<something unique>" in prompt
+    assert "create.md" in prompt
     assert "please advance the work" in (workspace / "chatlog.md").read_text()
-    assert os.path.isfile(workspace / "dispatch.md")
+    assert os.path.isfile(workspace / "create.md")
     record = json.loads((tmp_path / "records" / "front" / "run-0001.json").read_text())
     assert record["harness"] == "fake"

@@ -21,7 +21,7 @@ AGENTS_LOCAL_CONFIG = AGFRONT_ROOT / ".local" / "agents.local.toml"
 # permission answer until the timeout. Every new role belongs here.
 #
 # Front routes; it does not do the work, so it gets no shell. `Write` is here
-# for exactly one file — `dispatch.md`, the command file the handler posts —
+# for exactly one file — `create.md`, the request the handler posts to forge —
 # and the reading tools are for the chatlog in its own workspace. This is the
 # role's definition, not a fence around a role that would otherwise wander.
 ROLE_ALLOWED_TOOLS = {
