@@ -1,12 +1,18 @@
 """Resolve an agfront role and launch its configured harness.
 
-agforge's shape, minus the tool handover: agfront ships no CLI of its own and
-gives its role no PATH, because Front does not run anything — it reads a
-conversation and writes one file.
+agforge's shape, including its tool handover. Front used to run nothing and
+write one command file; since p2 it talks to other agents itself, so it needs
+`agentchat` on PATH and an identity to speak with. Both are decided here.
+
+The identity is a path, never a value: `AGENTCHAT_ZULIP_ENV` names the front
+bot's credentials file and the secret stays in `.local/`.
 """
 
 from __future__ import annotations
 
+import os
+import sys
+from dataclasses import replace
 from pathlib import Path
 
 from agag.agent_config import ResolvedAgent, load_config, resolve_role
@@ -15,18 +21,45 @@ from agag.harness import run_harness, write_run_record
 AGFRONT_ROOT = Path(__file__).resolve().parents[2]
 AGENTS_CONFIG = AGFRONT_ROOT / "agents.toml"
 AGENTS_LOCAL_CONFIG = AGFRONT_ROOT / ".local" / "agents.local.toml"
+#: The front bot's Zulip credentials. Front speaks as itself — a post it
+#: makes on the Developer's behalf is attributable to Front, which is what
+#: makes asking permission first meaningful.
+ZULIP_ENV = AGFRONT_ROOT / ".local" / "zulip.env"
+#: `agag.chat.ENV_VARIABLE`, spelled here so the run and the CLI agree.
+AGENTCHAT_ENV_VARIABLE = "AGENTCHAT_ZULIP_ENV"
 
 # A role missing from this table gets no `--allowedTools` at all from
 # `build_argv`, and claude_code then sits waiting for an interactive
 # permission answer until the timeout. Every new role belongs here.
 #
-# Front routes; it does not do the work, so it gets no shell. `Write` is here
-# for exactly one file — `create.md`, the request the handler posts to forge —
-# and the reading tools are for the chatlog in its own workspace. This is the
-# role's definition, not a fence around a role that would otherwise wander.
+# Front routes; it does not do the work. The reading tools are for the
+# chatlog and `tools/agents.md` in its own workspace, and `agentchat` is how
+# it reaches the agent that does the work. This is the role's definition, not
+# a fence around a role that would otherwise wander: without a grant,
+# claude_code sits on an interactive permission prompt until the timeout.
 ROLE_ALLOWED_TOOLS = {
-    "front": "Read,Write,Glob,Grep",
+    "front": "Read,Glob,Grep,Bash(agentchat:*)",
 }
+
+
+def tool_environment(
+    bin_dir: Path | None = None, zulip_env: Path | None = None
+) -> dict[str, str]:
+    """The handover: `agentchat` reachable by name, speaking as the front bot.
+
+    `run_harness` launches with `{**os.environ, **agent.environment}`, so this
+    is the whole seam. The bin directory is the one holding the interpreter
+    that runs the listener — in a `uv` project that is `.venv/bin`, where the
+    `agentchat` console script is installed — so no deployment path is
+    written down anywhere.
+    """
+    directory = Path(sys.executable).parent if bin_dir is None else bin_dir
+    environment = {AGENTCHAT_ENV_VARIABLE: str(zulip_env or ZULIP_ENV)}
+    if directory.is_dir():
+        environment["PATH"] = os.pathsep.join(
+            [str(directory), os.environ.get("PATH", "")]
+        )
+    return environment
 
 
 def resolve_agfront_role(
@@ -47,11 +80,12 @@ def resolve_agfront_role(
         config_path or AGENTS_CONFIG,
         AGENTS_LOCAL_CONFIG if overlay_path is None else overlay_path,
     )
-    return resolve_role(
+    agent = resolve_role(
         config, overlay, role,
         profile_override=profile_override,
         check_available=check_available,
     )
+    return replace(agent, environment={**agent.environment, **tool_environment()})
 
 
 def run_role(

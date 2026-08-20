@@ -69,12 +69,61 @@ def test_every_role_carries_a_tool_grant(monkeypatch, tmp_path):
     )
 
 
-def test_front_gets_no_shell():
-    """Front routes; the work happens elsewhere. Its grant is the reading
-    tools plus `Write`, which exists for one file — `create.md`."""
+def test_front_s_grant_is_reading_plus_agentchat():
+    """Front routes; the work happens elsewhere. Since p2 it does the asking
+    itself, so its grant is the reading tools plus the one command that
+    reaches another agent — and no general shell."""
     grant = role_run.ROLE_ALLOWED_TOOLS["front"]
-    assert "Bash" not in grant
-    assert "Write" in grant
+    assert "Bash(agentchat:*)" in grant
+    assert "Bash(" not in grant.replace("Bash(agentchat:*)", "")
+    # There is no command file any more; nothing in the workspace is read
+    # back by the handler, so Front has no reason to write one.
+    assert "Write" not in grant
+
+
+def test_the_run_carries_the_agentchat_identity(tmp_path):
+    """The one thing agfront decides about the outbound side: which
+    credentials file the run speaks with, handed over as a path so the secret
+    stays in `.local/`."""
+    environment = role_run.tool_environment(zulip_env=tmp_path / "zulip.env")
+    assert environment[role_run.AGENTCHAT_ENV_VARIABLE] == str(tmp_path / "zulip.env")
+    # A path, never a value: no credential is inlined into the run env.
+    assert not any(key.startswith("ZULIP_") for key in environment)
+
+
+def test_agentchat_is_reachable_by_its_bare_name(tmp_path):
+    """`agentchat` is installed beside the interpreter that runs the
+    listener, and the guide names it without a path."""
+    (tmp_path / "agentchat").touch()
+    environment = role_run.tool_environment(bin_dir=tmp_path)
+    assert environment["PATH"].split(os.pathsep)[0] == str(tmp_path)
+
+
+def test_a_missing_bin_directory_leaves_path_alone(tmp_path):
+    environment = role_run.tool_environment(bin_dir=tmp_path / "absent")
+    assert "PATH" not in environment
+
+
+def test_a_resolved_role_carries_the_handover(monkeypatch, tmp_path):
+    (tmp_path / "agents.toml").write_text(
+        'schema = "ag.agent-config.v1"\n'
+        '[models."ollama/test-model"]\n'
+        "[profiles.stub]\n"
+        'harness = "fake"\n'
+        'model = "ollama/test-model"\n'
+        "[roles.front]\n"
+        'profile = "stub"\n'
+        "requires = []\n"
+    )
+    (tmp_path / "agents.local.toml").write_text(
+        'schema = "ag.agent-config.v1"\n[local.harness.fake]\ncommand = "/bin/echo"\n'
+    )
+    agent = role_run.resolve_agfront_role(
+        "front",
+        config_path=tmp_path / "agents.toml",
+        overlay_path=tmp_path / "agents.local.toml",
+    )
+    assert agent.environment[role_run.AGENTCHAT_ENV_VARIABLE] == str(role_run.ZULIP_ENV)
 
 
 def test_resolution_obeys_the_config_pair_it_is_pointed_at(tmp_path, monkeypatch):
@@ -164,14 +213,16 @@ class Client:
         ]
 
 
-def test_a_stub_run_requests_through_the_real_harness_seam(monkeypatch, tmp_path):
+def test_a_stub_run_goes_through_the_real_harness_seam(monkeypatch, tmp_path):
     """The wiring proof: no `run_front` monkeypatch anywhere. The config pair,
-    `run_harness`, the generation workspace and the command file are all real;
-    only the harness process and Zulip are stubs."""
+    `run_harness`, the generation workspace and the intro harvest are all
+    real; only the harness process and Zulip are stubs."""
     stub_config(
         tmp_path,
         "cat > chatlog.seen\n"
-        "printf 'A title image of a red dragon.\\n' > create.md\n"
+        "cp tools/agents.md board.seen\n"
+        "printf '%s\\n' \"$AGENTCHAT_ZULIP_ENV\" > identity.seen\n"
+        "command -v agentchat > agentchat.seen\n"
         "echo asking",
     )
     monkeypatch.setattr(role_run, "AGENTS_CONFIG", tmp_path / "agents.toml")
@@ -184,30 +235,24 @@ def test_a_stub_run_requests_through_the_real_harness_seam(monkeypatch, tmp_path
         "agag.topics.topic_write",
         lambda topic, text, **kwargs: posts.append((kwargs.get("channel"), topic, text)),
     )
-    monkeypatch.setattr(
-        zulip_listener,
-        "topic_write",
-        lambda topic, text, **kwargs: posts.append((kwargs.get("channel"), topic, text)),
-    )
 
     zulip_listener.handle_topic(Client(posts), "front", "front-stub")
 
-    assert (
-        zulip_listener.OUTBOUND_CHANNEL,
-        "create-stub-1",
-        "A title image of a red dragon.",
-    ) in posts
-    # The reply into the front topic is the run's own answer plus where it went.
-    assert posts[-1][2] == (
-        "asking\n\nasked forge in #general > create-stub-1; the reply will appear there"
-    )
+    # Nothing but the front topic is posted to: the outbound side is Front's
+    # own doing now, and agfront has no route of its own left.
+    assert {post[0] for post in posts} == {"front"}
+    assert posts[-1][2] == "asking"
+
+    workspace = tmp_path / "topics" / "front" / "front-stub" / "1" / "front"
     # The run really saw its prompt on stdin, and the prompt was the placement
     # line plus the guide this repository actually ships — not a fixture.
-    workspace = tmp_path / "topics" / "front" / "front-stub" / "1" / "front"
     prompt = (workspace / "chatlog.seen").read_text()
     assert prompt.startswith("The chatlog is placed in the working directory.")
     assert "agentchat" in prompt
     assert "please advance the work" in (workspace / "chatlog.md").read_text()
-    assert os.path.isfile(workspace / "create.md")
+    # And it saw the board, the identity, and a reachable `agentchat`.
+    assert "agforge-agstudio1" in (workspace / "board.seen").read_text()
+    assert (workspace / "identity.seen").read_text().strip() == str(role_run.ZULIP_ENV)
+    assert os.path.basename((workspace / "agentchat.seen").read_text().strip()) == "agentchat"
     record = json.loads((tmp_path / "records" / "front" / "run-0001.json").read_text())
     assert record["harness"] == "fake"

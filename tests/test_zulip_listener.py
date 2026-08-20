@@ -1,12 +1,14 @@
-"""agfront's part of serving a front topic: one run, then one create request.
+"""agfront's part of serving a front topic: two files, one run, one reply.
 
 The serving *discipline* — ack first, always answer, name the failed step,
 re-serve when a human spoke during the run, the empty-topic guard, workspace
 numbering, chatlog formatting — lives in `agag.topics` and is tested there.
-What is pinned here is only what agfront decides: that the run's `create.md`
-becomes exactly one post in `#general`, under a `create-` topic derived from
-the conversation, that its absence is not a failure, and that the reply says
-where the request went.
+
+Since p2 agfront decides almost nothing else. What is pinned here is exactly
+that: the run gets the conversation and the freshly harvested board, the run's
+answer is the reply, and **no outbound route exists in agfront** — a request
+to another agent is something Front does with `agentchat`, not something this
+handler posts on its behalf.
 
 Same rule as the sibling suites: nothing asserts what an agent said.
 """
@@ -21,8 +23,10 @@ BOT_ID = 15
 HUMAN_ID = 8
 CHANNEL = "front"
 TOPIC = "front-20260817-120000"
-CREATE_TOPIC = "create-20260817-120000-1"
 REQUEST = "I want a title image for the game."
+
+INTRO_TOPIC = "intro-agforge-agstudio1"
+INTRO_BODY = "# agforge\n\nOpen a `create-…` topic in `agforge-agstudio1`."
 
 
 def message(sender_id=HUMAN_ID, name="Developer", content=REQUEST, id=1):
@@ -35,10 +39,6 @@ def message(sender_id=HUMAN_ID, name="Developer", content=REQUEST, id=1):
         "subject": TOPIC,
         "content": content,
     }
-
-
-INTRO_TOPIC = "intro-agforge-agstudio1"
-INTRO_BODY = "# agforge\n\nOpen a `create-…` topic in `agforge-agstudio1`."
 
 
 class Client:
@@ -70,29 +70,21 @@ class Client:
         return self.history
 
 
-def wire(monkeypatch, tmp_path, calls, *, answer="on it", create=None):
+def wire(monkeypatch, tmp_path, calls, *, answer="on it", run=None):
     monkeypatch.setattr(zulip_listener, "TOPICS_ROOT", tmp_path / "topics")
     monkeypatch.setattr(zulip_listener, "RECORDS_ROOT", tmp_path / "records")
-    # The reply into the front topic goes through the shared skeleton; the
-    # create request is posted by agfront itself. Catching both separately is
-    # what makes "one post into #general" checkable.
     monkeypatch.setattr(
         topics,
         "topic_write",
-        lambda topic, text, **kwargs: calls.append(("reply", topic, text)) or "success",
-    )
-    monkeypatch.setattr(
-        zulip_listener,
-        "topic_write",
         lambda topic, text, **kwargs: (
-            calls.append(("create", kwargs.get("channel"), topic, text)) or "success"
+            calls.append(("reply", kwargs.get("channel"), topic, text)) or "success"
         ),
     )
 
     def front_run(prompt, cwd):
         calls.append(("front", prompt, cwd))
-        if create is not None:
-            (cwd / zulip_listener.CREATE_FILE).write_text(create)
+        if run is not None:
+            run(cwd)
         return answer
 
     monkeypatch.setattr(zulip_listener, "run_front", front_run)
@@ -106,42 +98,18 @@ def gen_dir(tmp_path, number, role="front"):
     return tmp_path / "topics" / CHANNEL / TOPIC / str(number) / role
 
 
-# --- (a) an asset request ---------------------------------------------------
+# --- one serving ------------------------------------------------------------
 
 
-def test_a_create_file_becomes_one_post_in_general(monkeypatch, tmp_path):
+def test_the_run_s_answer_is_the_reply_and_nothing_is_posted_elsewhere(monkeypatch, tmp_path):
     calls = []
-    wire(monkeypatch, tmp_path, calls, create="# Title image\n\nA red dragon.\n")
+    wire(monkeypatch, tmp_path, calls, answer="Forge can do this. May I ask it?")
 
     zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
 
-    assert [call[0] for call in calls] == [
-        "whoami", "reply", "history", "front", "create", "reply", "history",
-    ]
-    assert calls[4][1:] == (
-        zulip_listener.OUTBOUND_CHANNEL, CREATE_TOPIC, "# Title image\n\nA red dragon.",
-    )
-
-
-def test_the_create_topic_is_derived_from_the_conversation():
-    """Front never names the topic. The stem points back at the conversation
-    that asked, and the generation number keeps a second request out of the
-    first request's topic."""
-    assert zulip_listener.create_topic_name(TOPIC, 1) == CREATE_TOPIC
-    assert zulip_listener.create_topic_name(TOPIC, 2) == "create-20260817-120000-2"
-    # A topic that somehow lost the prefix still gets a usable name.
-    assert zulip_listener.create_topic_name("odd", 1) == "create-odd-1"
-
-
-def test_the_reply_names_the_topic_the_request_went_to(monkeypatch, tmp_path):
-    """Nothing comes back to the front topic, so where it went is the only
-    thing the Developer can follow."""
-    calls = []
-    wire(monkeypatch, tmp_path, calls, create="a red dragon\n")
-    zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
-    assert calls[-2][2] == (
-        f"on it\n\nasked forge in #general > {CREATE_TOPIC}; the reply will appear there"
-    )
+    assert [call[0] for call in calls] == ["whoami", "reply", "history", "front", "reply", "history"]
+    assert {call[1] for call in calls if call[0] == "reply"} == {CHANNEL}
+    assert calls[-2][3] == "Forge can do this. May I ask it?"
 
 
 def test_the_chatlog_and_the_prompt_are_the_run_s_whole_input(monkeypatch, tmp_path):
@@ -157,42 +125,65 @@ def test_the_chatlog_and_the_prompt_are_the_run_s_whole_input(monkeypatch, tmp_p
     assert (cwd / "chatlog.md").read_text() == f"[Developer] {REQUEST}\n"
 
 
-# --- (b) chat, and requests Front refuses -----------------------------------
-
-
-def test_no_create_file_means_no_post_and_no_failure(monkeypatch, tmp_path):
-    """Two of the guide's three branches — answering, and refusing — leave the
-    topic without posting anything. That is the normal case."""
+def test_a_run_that_writes_nothing_is_the_normal_case(monkeypatch, tmp_path):
+    """Front answering in text, refusing, or asking permission all leave the
+    workspace as it was. There is no command file to look for any more."""
     calls = []
     wire(monkeypatch, tmp_path, calls, answer="I cannot do that.")
-
     zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
-
-    assert not any(call[0] == "create" for call in calls)
-    assert calls[-2][2] == "I cannot do that."
-
-
-# --- (c) an unpostable command file -----------------------------------------
+    assert calls[-2][3] == "I cannot do that."
+    assert sorted(p.name for p in gen_dir(tmp_path, 1).iterdir()) == ["chatlog.md", "tools"]
 
 
-@pytest.mark.parametrize("body", ["", "\n\n"])
-def test_an_empty_create_file_is_reported_not_posted(monkeypatch, tmp_path, body):
-    """A blank post into #general would start a forge run over nothing."""
+# --- the intro harvest ------------------------------------------------------
+
+
+def test_the_intro_harvest_lands_in_tools_before_the_run(monkeypatch, tmp_path):
+    """The guide tells Front to read `tools/`; this is what puts the other
+    agents' own introductions there, freshly, for every run."""
     calls = []
-    wire(monkeypatch, tmp_path, calls, create=body)
-
+    seen = {}
+    wire(
+        monkeypatch, tmp_path, calls,
+        run=lambda cwd: seen.update(text=(cwd / "tools" / "agents.md").read_text()),
+    )
     zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
-
-    assert not any(call[0] == "create" for call in calls)
-    assert calls[-1][2] == "failed during create: create.md is empty"
+    assert INTRO_BODY in seen["text"]
 
 
-def test_the_request_is_posted_as_written(monkeypatch, tmp_path):
-    """agfront relays; it never parses what the front wrote."""
+def test_a_run_sees_the_board_as_it_was_at_that_moment(monkeypatch, tmp_path):
     calls = []
-    wire(monkeypatch, tmp_path, calls, create="# Title\n\nTwo paragraphs.\n\nAnd more.\n")
-    zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
-    assert calls[4][3] == "# Title\n\nTwo paragraphs.\n\nAnd more."
+    wire(monkeypatch, tmp_path, calls)
+    zulip_listener.handle_topic(Client(calls, board={}), CHANNEL, TOPIC)
+    first = (gen_dir(tmp_path, 1) / "tools" / "agents.md").read_text()
+    zulip_listener.handle_topic(Client(calls, board={"intro-new": "hello"}), CHANNEL, TOPIC)
+    second = (gen_dir(tmp_path, 2) / "tools" / "agents.md").read_text()
+    assert agents_md.NO_AGENTS in first
+    assert "hello" in second
+
+
+def test_an_empty_board_does_not_stop_the_run(monkeypatch, tmp_path):
+    calls = []
+    wire(monkeypatch, tmp_path, calls, answer="nobody to ask")
+    zulip_listener.handle_topic(Client(calls, board={}), CHANNEL, TOPIC)
+    assert any(call[0] == "front" for call in calls)
+    assert calls[-2][3] == "nobody to ask"
+
+
+# --- attributability --------------------------------------------------------
+
+
+def test_agfront_knows_no_other_agent_s_channel():
+    """p2's third success criterion, as a test rather than only a grep: the
+    channel Front posts into must come from the harvested board. An agfront
+    that hardcoded it would pass every other test here."""
+    import pathlib
+
+    root = pathlib.Path(zulip_listener.__file__).resolve().parents[2]
+    searched = [*(root / "src").rglob("*.py"), *(root / "agent" / "guides").rglob("*.md")]
+    assert searched
+    for path in searched:
+        assert "agforge-agstudio1" not in path.read_text(encoding="utf-8"), path
 
 
 # --- failures and generations ----------------------------------------------
@@ -207,20 +198,18 @@ def test_a_front_failure_names_its_step(monkeypatch, tmp_path):
 
     monkeypatch.setattr(zulip_listener, "run_front", explode)
     zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
-    assert calls[-1][2] == "failed during front: claude_code timed out"
+    assert calls[-1][3] == "failed during front: claude_code timed out"
 
 
-def test_generation_increments_and_the_old_request_is_not_resent(monkeypatch, tmp_path):
+def test_each_serving_gets_its_own_generation(monkeypatch, tmp_path):
+    """The Developer's permission is simply the next serving, so a
+    conversation has several of them and each keeps its own evidence."""
     calls = []
-    wire(monkeypatch, tmp_path, calls, create="a red dragon\n")
+    wire(monkeypatch, tmp_path, calls)
     zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
-    monkeypatch.setattr(zulip_listener, "run_front", lambda prompt, cwd: "nothing to do")
-
     zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
-
-    assert (gen_dir(tmp_path, 1) / zulip_listener.CREATE_FILE).is_file()
-    assert not (gen_dir(tmp_path, 2) / zulip_listener.CREATE_FILE).exists()
-    assert len([call for call in calls if call[0] == "create"]) == 1
+    assert (gen_dir(tmp_path, 1) / "chatlog.md").is_file()
+    assert (gen_dir(tmp_path, 2) / "chatlog.md").is_file()
 
 
 def test_an_empty_topic_costs_no_agent_run(monkeypatch, tmp_path):
@@ -228,7 +217,7 @@ def test_an_empty_topic_costs_no_agent_run(monkeypatch, tmp_path):
     wire(monkeypatch, tmp_path, calls)
     zulip_listener.handle_topic(Client(calls, history=[]), CHANNEL, TOPIC)
     assert not any(call[0] == "front" for call in calls)
-    assert calls[-1][2] == zulip_listener.EMPTY_REPLY
+    assert calls[-1][3] == zulip_listener.EMPTY_REPLY
 
 
 def test_our_acks_are_dropped_from_the_chatlog(monkeypatch, tmp_path):
@@ -249,36 +238,3 @@ def test_guide_refuses_to_start_without_the_file(monkeypatch, tmp_path):
     monkeypatch.setattr(zulip_listener, "GUIDES", tmp_path)
     with pytest.raises(GuideError):
         zulip_listener.guide("front", "guide.md")
-
-
-# --- the intro harvest ------------------------------------------------------
-
-
-def test_the_intro_harvest_lands_in_tools_before_the_run(monkeypatch, tmp_path):
-    """The guide tells Front to read `tools/`; this is what puts the other
-    agents' own introductions there, freshly, for every run."""
-    calls = []
-    wire(monkeypatch, tmp_path, calls)
-    zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
-    agents_file = gen_dir(tmp_path, 1) / "tools" / "agents.md"
-    assert agents_file.is_file()
-    assert INTRO_BODY in agents_file.read_text()
-
-
-def test_a_run_sees_the_board_as_it_was_at_that_moment(monkeypatch, tmp_path):
-    calls = []
-    wire(monkeypatch, tmp_path, calls)
-    zulip_listener.handle_topic(Client(calls, board={}), CHANNEL, TOPIC)
-    first = (gen_dir(tmp_path, 1) / "tools" / "agents.md").read_text()
-    zulip_listener.handle_topic(Client(calls, board={"intro-new": "hello"}), CHANNEL, TOPIC)
-    second = (gen_dir(tmp_path, 2) / "tools" / "agents.md").read_text()
-    assert agents_md.NO_AGENTS in first
-    assert "hello" in second
-
-
-def test_an_empty_board_does_not_stop_the_run(monkeypatch, tmp_path):
-    calls = []
-    wire(monkeypatch, tmp_path, calls, answer="nobody to ask")
-    zulip_listener.handle_topic(Client(calls, board={}), CHANNEL, TOPIC)
-    assert any(call[0] == "front" for call in calls)
-    assert calls[-2][2] == "nobody to ask"
