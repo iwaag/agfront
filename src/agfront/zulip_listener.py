@@ -57,10 +57,18 @@ FRONT_TOPIC_PREFIX = "front-"
 ACK_TEXT = "Message received. Please wait for the reply."
 EMPTY_REPLY = "There is nothing in this topic to answer yet."
 
-# Front reads a conversation, reads the board, and posts a message or two. It
-# never generates, builds or runs anything, so it gets agforge's front budget,
-# not its generator's.
-FRONT_TIMEOUT_SECONDS = 360
+# Front reads a conversation, reads the board, and posts a message or two —
+# and, since it can be asked to see work through, sometimes waits on another
+# agent for as long as that agent takes. It still generates, builds and runs
+# nothing itself; what is long here is the waiting. One stretch of somebody
+# else's work can be twenty minutes, and a supervised request is usually
+# several of them in a row, so the budget is an hour.
+#
+# The cost of that: this listener is serial, so a run this long is also how
+# long the Developer's next `front-*` post waits to be served. That is the
+# trade the timeout makes — a supervision that survives the task, against a
+# front that answers instantly while it is busy.
+FRONT_TIMEOUT_SECONDS = 3600
 
 __all__ = [
     "ZULIP_ENV",
