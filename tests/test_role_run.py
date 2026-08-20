@@ -138,7 +138,22 @@ class Client:
     def whoami(self):
         return {"user_id": 15, "full_name": "Front"}
 
+    def stream_id(self, name):
+        return 30
+
+    def channel_topics(self, stream_id):
+        return ["intro-agforge-agstudio1"]
+
     def topic_history(self, channel, topic, num_before):
+        if channel == "agents":
+            return [
+                {
+                    "id": 99,
+                    "sender_id": 13,
+                    "sender_full_name": "Forge",
+                    "content": "# agforge\n\nOpen a `create-…` topic in `agforge-agstudio1`.",
+                }
+            ]
         return [
             {
                 "id": 1,
@@ -191,7 +206,7 @@ def test_a_stub_run_requests_through_the_real_harness_seam(monkeypatch, tmp_path
     workspace = tmp_path / "topics" / "front" / "front-stub" / "1" / "front"
     prompt = (workspace / "chatlog.seen").read_text()
     assert prompt.startswith("The chatlog is placed in the working directory.")
-    assert "create.md" in prompt
+    assert "agentchat" in prompt
     assert "please advance the work" in (workspace / "chatlog.md").read_text()
     assert os.path.isfile(workspace / "create.md")
     record = json.loads((tmp_path / "records" / "front" / "run-0001.json").read_text())

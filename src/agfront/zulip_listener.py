@@ -43,6 +43,7 @@ from agag.topics import (
 )
 from agag.zulip import ZulipClient, log, sweep_serve, topic_write
 
+from .agents_md import write_agents_md
 from .role_run import AGFRONT_ROOT, run_role
 
 ZULIP_ENV = AGFRONT_ROOT / ".local" / "zulip.env"
@@ -180,6 +181,9 @@ def serve(context) -> TopicResult:
     chatlog_path(front_dir).write_text(
         format_chatlog(context.history, context.self_id, drop=is_ack), encoding="utf-8"
     )
+
+    context.step = "harvest"
+    write_agents_md(context.client, front_dir)
 
     context.step = "front"
     sections = [run_front(front_prompt(context.bot_name), front_dir)]

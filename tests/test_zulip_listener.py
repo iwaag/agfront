@@ -15,7 +15,7 @@ import pytest
 from agag import topics
 from agag.topics import GuideError
 
-from agfront import zulip_listener
+from agfront import agents_md, zulip_listener
 
 BOT_ID = 15
 HUMAN_ID = 8
@@ -37,18 +37,35 @@ def message(sender_id=HUMAN_ID, name="Developer", content=REQUEST, id=1):
     }
 
 
+INTRO_TOPIC = "intro-agforge-agstudio1"
+INTRO_BODY = "# agforge\n\nOpen a `create-…` topic in `agforge-agstudio1`."
+
+
 class Client:
     email = "front-bot@example.invalid"
 
-    def __init__(self, calls, history=None):
+    def __init__(self, calls, history=None, board=None):
         self.calls = calls
         self.history = [message()] if history is None else history
+        #: The `#agents` board the harvest reads. Its reads stay out of
+        #: `calls`: it is one fixed step of every serving, pinned on its own
+        #: below, and threading it through every call-order assertion would
+        #: only make those assertions about the harvest.
+        self.board = {INTRO_TOPIC: INTRO_BODY} if board is None else board
 
     def whoami(self):
         self.calls.append(("whoami",))
         return {"user_id": BOT_ID, "full_name": "Front"}
 
+    def stream_id(self, name):
+        return 30
+
+    def channel_topics(self, stream_id):
+        return list(self.board)
+
     def topic_history(self, channel, topic, num_before):
+        if channel == agents_md.AGENTS_CHANNEL:
+            return [message(sender_id=13, name="Forge", content=self.board[topic], id=99)]
         self.calls.append(("history", channel, topic, num_before))
         return self.history
 
@@ -232,3 +249,36 @@ def test_guide_refuses_to_start_without_the_file(monkeypatch, tmp_path):
     monkeypatch.setattr(zulip_listener, "GUIDES", tmp_path)
     with pytest.raises(GuideError):
         zulip_listener.guide("front", "guide.md")
+
+
+# --- the intro harvest ------------------------------------------------------
+
+
+def test_the_intro_harvest_lands_in_tools_before_the_run(monkeypatch, tmp_path):
+    """The guide tells Front to read `tools/`; this is what puts the other
+    agents' own introductions there, freshly, for every run."""
+    calls = []
+    wire(monkeypatch, tmp_path, calls)
+    zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
+    agents_file = gen_dir(tmp_path, 1) / "tools" / "agents.md"
+    assert agents_file.is_file()
+    assert INTRO_BODY in agents_file.read_text()
+
+
+def test_a_run_sees_the_board_as_it_was_at_that_moment(monkeypatch, tmp_path):
+    calls = []
+    wire(monkeypatch, tmp_path, calls)
+    zulip_listener.handle_topic(Client(calls, board={}), CHANNEL, TOPIC)
+    first = (gen_dir(tmp_path, 1) / "tools" / "agents.md").read_text()
+    zulip_listener.handle_topic(Client(calls, board={"intro-new": "hello"}), CHANNEL, TOPIC)
+    second = (gen_dir(tmp_path, 2) / "tools" / "agents.md").read_text()
+    assert agents_md.NO_AGENTS in first
+    assert "hello" in second
+
+
+def test_an_empty_board_does_not_stop_the_run(monkeypatch, tmp_path):
+    calls = []
+    wire(monkeypatch, tmp_path, calls, answer="nobody to ask")
+    zulip_listener.handle_topic(Client(calls, board={}), CHANNEL, TOPIC)
+    assert any(call[0] == "front" for call in calls)
+    assert calls[-2][2] == "nobody to ask"
