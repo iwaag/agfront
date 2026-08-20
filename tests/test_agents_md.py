@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from agfront import agents_md
 
 FORGE_INTRO = (
-    "# agforge\n\nOpen a `create-…` topic in this instance's "
+    "# agforge\n\nOpen an `assetplan-…` topic in this instance's "
     "`agforge-agstudio1` channel.\n\n---\nPosted: 2026-08-20"
 )
 STAMP = datetime(2026, 8, 20, 9, 0, tzinfo=timezone.utc)

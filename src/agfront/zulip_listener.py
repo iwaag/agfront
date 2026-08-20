@@ -13,8 +13,8 @@ anybody can serve the request, asks the Developer, and — if permitted —
 speaks to that agent itself with `agentchat`.
 
 **No outbound route lives here any more.** Until p2 the run wrote `create.md`
-and *this* handler posted it into a `create-` topic in `#general`, because
-Front was not allowed to name a channel. That was a shackle around an agent
+and *this* handler posted it into an asset-request topic in `#general` whose
+name it derived itself, because Front was not allowed to name a channel. That was a shackle around an agent
 that could not read the board; now it can. Which agent, which channel and
 which topic prefix are things Front learns by reading, which is precisely the
 capability this phase exists to demonstrate — so grepping this file for
@@ -164,7 +164,7 @@ def main() -> None:
     # The filter is `front-` only, which is what keeps Front from answering
     # the topics it opens elsewhere: no bot loop, by filter and not by luck.
     # The other side of the same asymmetry is agforge, which sweeps its own
-    # `create-` topics and never `front-`.
+    # `assetplan-` topics and never `front-`.
     log(f"agfront zulip listener starting (pull sweep, prefix {FRONT_TOPIC_PREFIX!r})")
     try:
         sweep_serve(client, handler, topic_filter=(FRONT_TOPIC_PREFIX,))

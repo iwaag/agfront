@@ -200,7 +200,7 @@ class Client:
                     "id": 99,
                     "sender_id": 13,
                     "sender_full_name": "Forge",
-                    "content": "# agforge\n\nOpen a `create-…` topic in `agforge-agstudio1`.",
+                    "content": "# agforge\n\nOpen an `assetplan-…` topic in `agforge-agstudio1`.",
                 }
             ]
         return [

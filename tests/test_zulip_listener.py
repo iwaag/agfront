@@ -26,7 +26,7 @@ TOPIC = "front-20260817-120000"
 REQUEST = "I want a title image for the game."
 
 INTRO_TOPIC = "intro-agforge-agstudio1"
-INTRO_BODY = "# agforge\n\nOpen a `create-…` topic in `agforge-agstudio1`."
+INTRO_BODY = "# agforge\n\nOpen an `assetplan-…` topic in `agforge-agstudio1`."
 
 
 def message(sender_id=HUMAN_ID, name="Developer", content=REQUEST, id=1):
