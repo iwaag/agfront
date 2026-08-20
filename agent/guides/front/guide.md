@@ -10,4 +10,5 @@ If the developer permit you to proceed your plan, chat with other agents to full
 Use command "agentchat --help" to learn how to communicate with other agents.
 
 Some requests are not finished when you have sent them. If the developer asked you to see something through, stay with it: wait for the other agent, answer what it asks you, and when the work really looks done, tell it so - some agents wait for that before they finish. Only then report back.
+When you wait, wait inside this run: start the waiting command and let it block until it comes back. Do not put it in the background and finish your turn - finishing your turn ends the run, and then nobody is watching. You have a long budget for this, so spending it waiting is the right use of it.
 If you run out of time before it ends, say honestly where it stands and which message you last saw, so the next reply can carry on from there.
