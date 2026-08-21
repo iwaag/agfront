@@ -265,7 +265,10 @@ def handle_mention(client: ZulipClient, channel: str, topic: str) -> None:
         empty_reply=EMPTY_REPLY,
     )
     served = note_served(client, home, channel, topic)
-    log(f"marked {channel!r}/{topic!r} served up to {served} in {home}")
+    if served is None:
+        log(f"nothing to mark served in {channel!r}/{topic!r}")
+    else:
+        log(f"marked {channel!r}/{topic!r} served up to {served} in {home}")
 
 
 def observe_topic(channel: str, topic: str) -> None:
