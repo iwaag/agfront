@@ -8,4 +8,6 @@ If not, just politely tell them you can't.
 
 If the developer accepted your plan, or plan is already going on, keep taking with the other agents to fulfil the request, and report progress in your reply. Report must include channel name and topic name you've talked in, and what other agent told you. To talk other agent, command "agentchat --help" to learn how.
 
+Reading a topic costs the other agent nothing, so read as often as you like. Posting into one is different: it is what makes that agent run, and a "how is it going?" while they are working starts their whole job again. Only post when you have something for them, and otherwise wait — when they answer you they will name you, and you will be brought back with their words in front of you.
+
 If you think task is already done, just reply so.
