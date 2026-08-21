@@ -193,6 +193,9 @@ class Client:
     def channel_topics(self, stream_id):
         return ["intro-agforge-agstudio1"]
 
+    def own_rootchat_notes(self, num_before=200):
+        return []
+
     def topic_history(self, channel, topic, num_before):
         if channel == "agents":
             return [
@@ -223,15 +226,11 @@ def test_a_stub_run_goes_through_the_real_harness_seam(monkeypatch, tmp_path):
         "cp tools/agents.md board.seen\n"
         "printf '%s\\n' \"$AGENTCHAT_ZULIP_ENV\" > identity.seen\n"
         "printf '%s\\n' \"$AGENTCHAT_HOME\" > home.seen\n"
-        "printf '%s\\n' \"$AGENTCHAT_LEDGER\" > ledger.seen\n"
         "command -v agentchat > agentchat.seen\n"
         "echo asking",
     )
-    ledger = tmp_path / "agentchat" / "participations.jsonl"
     monkeypatch.setattr(role_run, "AGENTS_CONFIG", tmp_path / "agents.toml")
     monkeypatch.setattr(role_run, "AGENTS_LOCAL_CONFIG", tmp_path / "agents.local.toml")
-    monkeypatch.setattr(role_run, "AGENTCHAT_LEDGER", ledger)
-    monkeypatch.setattr(zulip_listener, "AGENTCHAT_LEDGER", ledger)
     monkeypatch.setattr(zulip_listener, "TOPICS_ROOT", tmp_path / "topics")
     monkeypatch.setattr(zulip_listener, "RECORDS_ROOT", tmp_path / "records")
 
@@ -258,12 +257,11 @@ def test_a_stub_run_goes_through_the_real_harness_seam(monkeypatch, tmp_path):
     # And it saw the board, the identity, and a reachable `agentchat`.
     assert "agforge-agstudio1" in (workspace / "board.seen").read_text()
     assert (workspace / "identity.seen").read_text().strip() == str(role_run.ZULIP_ENV)
-    # …and which conversation it is posting on behalf of, and where that is
-    # written down. Those two are the whole callback: what this run says
-    # elsewhere is recorded against `front-stub`, and the answer comes back
-    # here after the run is over.
+    # …and which conversation it is posting on behalf of. That one variable
+    # is the whole callback now: `agentchat send` writes it into whatever
+    # topic this run posts in, as a root note, and the answer comes back here
+    # after the run is over. Nothing is written to a file this agent keeps.
     assert (workspace / "home.seen").read_text().strip() == "front/front-stub"
-    assert (workspace / "ledger.seen").read_text().strip() == str(ledger)
     assert os.path.basename((workspace / "agentchat.seen").read_text().strip()) == "agentchat"
     record = json.loads((tmp_path / "records" / "front" / "run-0001.json").read_text())
     assert record["harness"] == "fake"

@@ -10,9 +10,9 @@ answer is the reply, and **no outbound route exists in agfront** — a request
 to another agent is something Front does with `agentchat`, not something this
 handler posts on its behalf.
 
-Since p7 there is one more thing to pin: a mention elsewhere serves the
-`front-*` conversation the ledger says it belongs to, and answers where it
-was asked.
+Since p8 there is one more thing to pin: a mention elsewhere serves the
+`front-*` conversation the **topic's own root note** says it belongs to, and
+answers **at home** — never into the topic that called.
 
 Same rule as the sibling suites: nothing asserts what an agent said.
 """
@@ -22,7 +22,7 @@ from agag import topics
 from agag.topics import GuideError
 
 from agag import intro as agents_md
-from agag import participation
+from agag.selfnote import rootchat_note, Conversation
 
 from agfront import zulip_listener
 
@@ -76,13 +76,15 @@ class Client:
         self.calls.append(("history", channel, topic, num_before))
         return self.history
 
+    def own_rootchat_notes(self, num_before=200):
+        """The `sender:me search:rootchat` narrow. Front has anchored nothing
+        in this fixture, so it is party to no other conversation."""
+        return []
 
-def wire(monkeypatch, tmp_path, calls, *, answer="on it", run=None, ledger=None):
+
+def wire(monkeypatch, tmp_path, calls, *, answer="on it", run=None):
     monkeypatch.setattr(zulip_listener, "TOPICS_ROOT", tmp_path / "topics")
     monkeypatch.setattr(zulip_listener, "RECORDS_ROOT", tmp_path / "records")
-    monkeypatch.setattr(
-        zulip_listener, "AGENTCHAT_LEDGER", ledger or (tmp_path / "ledger.jsonl")
-    )
     monkeypatch.setattr(
         topics,
         "topic_write",
@@ -286,6 +288,18 @@ class Board(Client):
         self.calls.append(("history", channel, topic, num_before))
         return list(self.histories.get((channel, topic), []))
 
+    def own_rootchat_notes(self, num_before=200):
+        """The `sender:me search:rootchat` narrow, over these fixtures."""
+        found = []
+        for (channel, topic), history in self.histories.items():
+            for row in history:
+                if row.get("sender_id") != BOT_ID:
+                    continue
+                if str(row.get("content", "")).startswith("[selfnote][rootchat]"):
+                    found.append({**row, "type": "stream",
+                                  "display_recipient": channel, "subject": topic})
+        return found
+
 
 def remote_message(content="task 1 is blocked, what now?", sender_id=11, name="Autolab"):
     return {
@@ -299,21 +313,29 @@ def remote_message(content="task 1 is blocked, what now?", sender_id=11, name="A
     }
 
 
+def root_note(id=5):
+    """Front's own anchor in the remote topic — hidden everywhere, and the
+    only thing that says which conversation Front is there for."""
+    return {
+        "id": id,
+        "type": "stream",
+        "sender_id": BOT_ID,
+        "sender_full_name": "Front",
+        "display_recipient": REMOTE_CHANNEL,
+        "subject": REMOTE_TOPIC,
+        "content": rootchat_note(Conversation(CHANNEL, TOPIC)),
+    }
+
+
 def test_a_mention_serves_the_front_topic_it_was_sent_on_behalf_of(monkeypatch, tmp_path):
-    """The whole of p7 for Front: the request it is supervising is the run's
-    subject, and the answer goes where the question was asked."""
+    """p8 for Front: the request it is supervising is the run's subject, and
+    the answer goes **home**, to the developer — not into the topic that
+    called, which is where p7's loop was fed from."""
     calls = []
-    ledger = tmp_path / "ledger.jsonl"
-    wire(monkeypatch, tmp_path, calls, answer="yes, that is done", ledger=ledger)
-    participation.record(
-        ledger,
-        remote=participation.Conversation(REMOTE_CHANNEL, REMOTE_TOPIC),
-        home=participation.Conversation(CHANNEL, TOPIC),
-        message_id=5,
-    )
+    wire(monkeypatch, tmp_path, calls, answer="yes, that is done")
     client = Board(calls, {
         (CHANNEL, TOPIC): [message()],
-        (REMOTE_CHANNEL, REMOTE_TOPIC): [remote_message()],
+        (REMOTE_CHANNEL, REMOTE_TOPIC): [root_note(), remote_message()],
     })
 
     zulip_listener.handle_mention(client, REMOTE_CHANNEL, REMOTE_TOPIC)
@@ -322,26 +344,21 @@ def test_a_mention_serves_the_front_topic_it_was_sent_on_behalf_of(monkeypatch, 
     _, cwd, home = next((c[1], c[2], c[3]) for c in calls if c[0] == "front")
     assert home == (CHANNEL, TOPIC)
     assert (cwd / "chatlog.md").read_text() == f"[Developer] {REQUEST}\n"
-    thread = cwd / "threads" / REMOTE_CHANNEL / f"{REMOTE_TOPIC}.md"
-    assert "task 1 is blocked" in thread.read_text()
-    # Everything posted went to the topic that called Front back.
-    assert {c[1] for c in calls if c[0] == "reply"} == {REMOTE_CHANNEL}
-    assert replies(calls)[-1] == "@**Autolab**\n\nyes, that is done"
+    thread = (cwd / "threads" / REMOTE_CHANNEL / f"{REMOTE_TOPIC}.md").read_text()
+    assert "task 1 is blocked" in thread
+    # The note that carried the wiring is not part of the conversation.
+    assert "selfnote" not in thread
+    # Everything posted went home. Nothing was said in the calling topic.
+    assert {c[1] for c in calls if c[0] == "reply"} == {CHANNEL}
+    assert replies(calls)[-1] == "@**Developer**\n\nyes, that is done"
 
 
 def test_the_threads_are_named_in_the_prompt(monkeypatch, tmp_path):
     calls = []
-    ledger = tmp_path / "ledger.jsonl"
-    wire(monkeypatch, tmp_path, calls, ledger=ledger)
-    participation.record(
-        ledger,
-        remote=participation.Conversation(REMOTE_CHANNEL, REMOTE_TOPIC),
-        home=participation.Conversation(CHANNEL, TOPIC),
-        message_id=5,
-    )
+    wire(monkeypatch, tmp_path, calls)
     client = Board(calls, {
         (CHANNEL, TOPIC): [message()],
-        (REMOTE_CHANNEL, REMOTE_TOPIC): [remote_message()],
+        (REMOTE_CHANNEL, REMOTE_TOPIC): [root_note(), remote_message()],
     })
     zulip_listener.handle_topic(client, CHANNEL, TOPIC)
     prompt = next(c[1] for c in calls if c[0] == "front")
@@ -356,10 +373,12 @@ def test_a_first_request_carries_no_sentence_about_threads(monkeypatch, tmp_path
     assert "threads" not in prompt
 
 
-def test_a_mention_nothing_was_sent_from_costs_no_run(monkeypatch, tmp_path):
+def test_a_mention_in_a_topic_front_never_anchored_costs_no_run(monkeypatch, tmp_path):
     """Front's entrance is `#front`. Being named somewhere it never wrote is
-    not a request to it."""
+    not a request to it, and there is no root note of its own to say
+    otherwise."""
     calls = []
     wire(monkeypatch, tmp_path, calls)
-    zulip_listener.handle_mention(Client(calls), "general", "somebody-elses-topic")
-    assert calls == []
+    client = Board(calls, {("general", "somebody-elses-topic"): [remote_message()]})
+    zulip_listener.handle_mention(client, "general", "somebody-elses-topic")
+    assert [call[0] for call in calls] == ["whoami", "history"]

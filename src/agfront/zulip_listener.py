@@ -26,11 +26,18 @@ is simply the next serving.
 
 **Since `agent_standardize` p7 a supervision is not a long run — it is
 several short ones.** Front posts into another agent's topic and finishes;
-`agentchat send` records that participation, and when that agent's reply
-names Front, `sweep_serve`'s mention route serves this `front-*` conversation
-again with the remote thread beside its chatlog, and Front answers there.
-Nothing blocks, nothing is backgrounded, and a run that ends is not a
-supervision that stopped.
+when that agent's reply names Front, `sweep_serve`'s mention route serves
+this `front-*` conversation again with the remote thread beside its chatlog,
+and Front answers there. Nothing blocks, nothing is backgrounded, and a run
+that ends is not a supervision that stopped.
+
+**Since p8 the memory of that is in the chat.** `agentchat send` anchors the
+topic it posts into with `[selfnote][rootchat] <channel>/<topic>`, naming the
+`front-*` conversation the run was serving, so this listener asks the topic
+which home to serve instead of asking a ledger file — and a called-back run
+**answers at home**, where the guide's first line ("your reply goes to the
+developer") is true. Anything Front wants to say to the other agent is a
+deliberate `agentchat send`, never a reply by reflex.
 """
 
 from __future__ import annotations
@@ -54,10 +61,9 @@ from agag.topics import (
     write_threads,
 )
 from agag.intro import write_agents_md
-from agag.participation import home_for, remotes_for_home
-from agag.zulip import ZulipClient, log, sweep_serve
+from agag.zulip import ZulipClient, log, remotes_for_home, rootchat_home, sweep_serve
 
-from .role_run import AGENTCHAT_LEDGER, AGFRONT_ROOT, ZULIP_ENV, run_role
+from .role_run import AGFRONT_ROOT, ZULIP_ENV, run_role
 
 TOPICS_ROOT = AGFRONT_ROOT / ".local" / "topics"
 GUIDES = AGFRONT_ROOT / "agent" / "guides"
@@ -182,7 +188,7 @@ def serve(context) -> TopicResult:
         [
             conversation.as_pair()
             for conversation in remotes_for_home(
-                AGENTCHAT_LEDGER, context.channel, context.topic
+                context.client, context.channel, context.topic
             )
         ],
         context.self_id,
@@ -211,26 +217,32 @@ def handle_topic(client: ZulipClient, channel: str, topic: str) -> None:
 def handle_mention(client: ZulipClient, channel: str, topic: str) -> None:
     """Front was named somewhere it does not own: serve the request it came from.
 
-    The ledger says which `front-*` conversation this remote topic was opened
-    for. That conversation is what the run works on — its chatlog, its
-    workspace, its generation — and the answer goes back into the topic that
-    named Front, because that is where the question was asked. What Front
-    wants to tell the Developer, it tells with `agentchat`.
+    The topic itself says which `front-*` conversation Front is speaking there
+    on behalf of — the root note `agentchat send` wrote before Front's first
+    post. That conversation is the whole serving: its chatlog, its workspace,
+    its generation, **and its reply**. The topic that named Front is placed
+    beside the chatlog as a thread, so the run reads what was said there
+    without answering into it.
 
-    A mention in a topic no participation covers is not Front's business: it
-    is logged and dropped. Front's own entrance is `#front`, and nothing
-    else opens a request to it.
+    Answering at home is the p8 change. p7 replied into the calling topic,
+    which made every progress report a post in another agent's conversation —
+    and a post in somebody's topic serves them, which is the loop p7 could
+    not end. Now nothing goes outward unless Front decides to send it.
+
+    A mention in a topic Front never anchored is not Front's business: it is
+    logged and dropped, as in p7. Front's own entrance is `#front`, and
+    nothing else opens a request to it.
     """
-    home = home_for(AGENTCHAT_LEDGER, channel, topic)
+    self_id = int(client.whoami()["user_id"])
+    home = rootchat_home(client, channel, topic, self_id)
     if home is None:
-        log(f"mention in {channel!r}/{topic!r} matches no participation; ignoring")
+        log(f"mention in {channel!r}/{topic!r} carries no root note of ours; ignoring")
         return
     log(f"mention in {channel!r}/{topic!r} serves {home}")
     serve_topic(
         client, home.channel, home.topic, serve,
         ack_text=ACK_TEXT,
         empty_reply=EMPTY_REPLY,
-        reply_to=(channel, topic),
     )
 
 

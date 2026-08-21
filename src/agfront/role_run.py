@@ -7,11 +7,11 @@ write one command file; since p2 it talks to other agents itself, so it needs
 The identity is a path, never a value: `AGENTCHAT_ZULIP_ENV` names the front
 bot's credentials file and the secret stays in `.local/`.
 
-Since `agent_standardize` p7 the handover carries two more paths:
-`AGENTCHAT_HOME`, the conversation this run is serving, and
-`AGENTCHAT_LEDGER`, where `agentchat send` writes what it posted and on whose
-behalf. Together they are what lets an answer reach Front after the run that
-asked the question is over.
+Since `agent_standardize` p7 the handover also carries `AGENTCHAT_HOME`, the
+conversation this run is serving. p8 made it the whole of that handover:
+`agentchat send` writes the home into the topic it posts in, as a
+`[selfnote][rootchat]` note, so what lets an answer reach Front after the run
+is over is the chat itself. There is no ledger file and no `AGENTCHAT_LEDGER`.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-from agag import participation
+from agag import selfnote
 from agag.agent_config import ResolvedAgent, load_config, resolve_role
 from agag.harness import run_harness, write_run_record
 
@@ -34,8 +34,6 @@ AGENTS_LOCAL_CONFIG = AGFRONT_ROOT / ".local" / "agents.local.toml"
 ZULIP_ENV = AGFRONT_ROOT / ".local" / "zulip.env"
 #: `agag.chat.ENV_VARIABLE`, spelled here so the run and the CLI agree.
 AGENTCHAT_ENV_VARIABLE = "AGENTCHAT_ZULIP_ENV"
-#: Front's participation ledger. One file per agent, in the ignored tree.
-AGENTCHAT_LEDGER = AGFRONT_ROOT / ".local" / "agentchat" / "participations.jsonl"
 
 # A role missing from this table gets no `--allowedTools` at all from
 # `build_argv`, and claude_code then sits waiting for an interactive
@@ -55,7 +53,6 @@ def tool_environment(
     bin_dir: Path | None = None,
     zulip_env: Path | None = None,
     home: tuple[str, str] | None = None,
-    ledger: Path | None = None,
 ) -> dict[str, str]:
     """The handover: `agentchat` reachable by name, speaking as the front bot.
 
@@ -66,18 +63,13 @@ def tool_environment(
     written down anywhere.
 
     `home` is the conversation being served. A run that posts somewhere else
-    is recorded against it, which is how the answer finds its way back to
-    this topic long after this run has ended.
+    anchors that topic to it with a root note, which is how the answer finds
+    its way back to this topic long after this run has ended.
     """
     directory = Path(sys.executable).parent if bin_dir is None else bin_dir
-    environment = {
-        AGENTCHAT_ENV_VARIABLE: str(zulip_env or ZULIP_ENV),
-        participation.LEDGER_VARIABLE: str(ledger or AGENTCHAT_LEDGER),
-    }
+    environment = {AGENTCHAT_ENV_VARIABLE: str(zulip_env or ZULIP_ENV)}
     if home is not None:
-        environment[participation.HOME_VARIABLE] = str(
-            participation.Conversation(*home)
-        )
+        environment[selfnote.HOME_VARIABLE] = str(selfnote.Conversation(*home))
     if directory.is_dir():
         environment["PATH"] = os.pathsep.join(
             [str(directory), os.environ.get("PATH", "")]
