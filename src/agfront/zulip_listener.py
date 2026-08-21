@@ -43,9 +43,9 @@ from agag.topics import (
     serve_topic,
     topic_workspace as shared_topic_workspace,
 )
+from agag.intro import write_agents_md
 from agag.zulip import ZulipClient, log, sweep_serve
 
-from .agents_md import write_agents_md
 from .role_run import AGFRONT_ROOT, ZULIP_ENV, run_role
 
 TOPICS_ROOT = AGFRONT_ROOT / ".local" / "topics"

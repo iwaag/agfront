@@ -17,7 +17,9 @@ import pytest
 from agag import topics
 from agag.topics import GuideError
 
-from agfront import agents_md, zulip_listener
+from agag import intro as agents_md
+
+from agfront import zulip_listener
 
 BOT_ID = 15
 HUMAN_ID = 8
