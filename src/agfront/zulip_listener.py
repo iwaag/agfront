@@ -38,6 +38,13 @@ which home to serve instead of asking a ledger file — and a called-back run
 **answers at home**, where the guide's first line ("your reply goes to the
 developer") is true. Anything Front wants to say to the other agent is a
 deliberate `agentchat send`, never a reply by reflex.
+
+**Since p9 a served callback is marked.** Answering at home means Front never
+becomes the last poster in the topic that called it, so recovery would find
+that topic still naming Front and serve the exchange again on every restart.
+`note_served` writes `[selfnote][served] <channel>/<topic> <message id>` into
+the `front-*` conversation, and the startup sweep skips anything at or below
+the mark.
 """
 
 from __future__ import annotations
@@ -61,7 +68,14 @@ from agag.topics import (
     write_threads,
 )
 from agag.intro import write_agents_md
-from agag.zulip import ZulipClient, log, remotes_for_home, rootchat_home, sweep_serve
+from agag.zulip import (
+    ZulipClient,
+    log,
+    note_served,
+    remotes_for_home,
+    rootchat_home,
+    sweep_serve,
+)
 
 from .role_run import AGFRONT_ROOT, ZULIP_ENV, run_role
 
@@ -232,6 +246,12 @@ def handle_mention(client: ZulipClient, channel: str, topic: str) -> None:
     A mention in a topic Front never anchored is not Front's business: it is
     logged and dropped, as in p7. Front's own entrance is `#front`, and
     nothing else opens a request to it.
+
+    Afterwards the serving is marked in home with `note_served`
+    (`agent_standardize` p9). Because the reply went home, Front is never the
+    last poster in the topic that called it, so without the mark a listener
+    restart would find that topic still "naming Front, answered by somebody
+    else" and serve the whole exchange again.
     """
     self_id = int(client.whoami()["user_id"])
     home = rootchat_home(client, channel, topic, self_id)
@@ -244,6 +264,8 @@ def handle_mention(client: ZulipClient, channel: str, topic: str) -> None:
         ack_text=ACK_TEXT,
         empty_reply=EMPTY_REPLY,
     )
+    served = note_served(client, home, channel, topic)
+    log(f"marked {channel!r}/{topic!r} served up to {served} in {home}")
 
 
 def observe_topic(channel: str, topic: str) -> None:

@@ -81,6 +81,10 @@ class Client:
         in this fixture, so it is party to no other conversation."""
         return []
 
+    def send_to_channel(self, channel, topic, content):
+        self.calls.append(("post", channel, topic, content))
+        return 900
+
 
 def wire(monkeypatch, tmp_path, calls, *, answer="on it", run=None):
     monkeypatch.setattr(zulip_listener, "TOPICS_ROOT", tmp_path / "topics")
@@ -351,6 +355,20 @@ def test_a_mention_serves_the_front_topic_it_was_sent_on_behalf_of(monkeypatch, 
     # Everything posted went home. Nothing was said in the calling topic.
     assert {c[1] for c in calls if c[0] == "reply"} == {CHANNEL}
     assert replies(calls)[-1] == "@**Developer**\n\nyes, that is done"
+    # ...including the mark that says this callback is answered (p9).
+    assert [c for c in calls if c[0] == "post"] == [
+        ("post", CHANNEL, TOPIC,
+         f"[selfnote][served] {REMOTE_CHANNEL}/{REMOTE_TOPIC} 7"),
+    ]
+
+
+def test_a_mention_front_never_anchored_leaves_no_mark(monkeypatch, tmp_path):
+    """Nothing was served, so there is nothing to say has been served."""
+    calls = []
+    wire(monkeypatch, tmp_path, calls)
+    client = Board(calls, {("general", "somebody-elses-topic"): [remote_message()]})
+    zulip_listener.handle_mention(client, "general", "somebody-elses-topic")
+    assert [c for c in calls if c[0] == "post"] == []
 
 
 def test_the_threads_are_named_in_the_prompt(monkeypatch, tmp_path):
