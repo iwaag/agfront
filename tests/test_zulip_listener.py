@@ -10,6 +10,10 @@ answer is the reply, and **no outbound route exists in agfront** — a request
 to another agent is something Front does with `agentchat`, not something this
 handler posts on its behalf.
 
+Since p7 there is one more thing to pin: a mention elsewhere serves the
+`front-*` conversation the ledger says it belongs to, and answers where it
+was asked.
+
 Same rule as the sibling suites: nothing asserts what an agent said.
 """
 
@@ -18,6 +22,7 @@ from agag import topics
 from agag.topics import GuideError
 
 from agag import intro as agents_md
+from agag import participation
 
 from agfront import zulip_listener
 
@@ -72,9 +77,12 @@ class Client:
         return self.history
 
 
-def wire(monkeypatch, tmp_path, calls, *, answer="on it", run=None):
+def wire(monkeypatch, tmp_path, calls, *, answer="on it", run=None, ledger=None):
     monkeypatch.setattr(zulip_listener, "TOPICS_ROOT", tmp_path / "topics")
     monkeypatch.setattr(zulip_listener, "RECORDS_ROOT", tmp_path / "records")
+    monkeypatch.setattr(
+        zulip_listener, "AGENTCHAT_LEDGER", ledger or (tmp_path / "ledger.jsonl")
+    )
     monkeypatch.setattr(
         topics,
         "topic_write",
@@ -83,8 +91,8 @@ def wire(monkeypatch, tmp_path, calls, *, answer="on it", run=None):
         ),
     )
 
-    def front_run(prompt, cwd):
-        calls.append(("front", prompt, cwd))
+    def front_run(prompt, cwd, home):
+        calls.append(("front", prompt, cwd, home))
         if run is not None:
             run(cwd)
         return answer
@@ -100,6 +108,11 @@ def gen_dir(tmp_path, number, role="front"):
     return tmp_path / "topics" / CHANNEL / TOPIC / str(number) / role
 
 
+def replies(calls):
+    """Just the message bodies, in the order they were posted."""
+    return [call[3] for call in calls if call[0] == "reply"]
+
+
 # --- one serving ------------------------------------------------------------
 
 
@@ -109,22 +122,31 @@ def test_the_run_s_answer_is_the_reply_and_nothing_is_posted_elsewhere(monkeypat
 
     zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
 
-    assert [call[0] for call in calls] == ["whoami", "reply", "history", "front", "reply", "history"]
+    assert [call[0] for call in calls] == [
+        "whoami", "reply", "history", "front",
+        # the handoff lookup, the reply, then the post-run re-check
+        "history", "reply", "history",
+    ]
     assert {call[1] for call in calls if call[0] == "reply"} == {CHANNEL}
-    assert calls[-2][3] == "Forge can do this. May I ask it?"
+    assert replies(calls)[-1] == "@**Developer**\n\nForge can do this. May I ask it?"
 
 
 def test_the_chatlog_and_the_prompt_are_the_run_s_whole_input(monkeypatch, tmp_path):
     calls = []
     wire(monkeypatch, tmp_path, calls)
     zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
-    prompt, cwd = next((call[1], call[2]) for call in calls if call[0] == "front")
+    prompt, cwd, home = next(
+        (call[1], call[2], call[3]) for call in calls if call[0] == "front"
+    )
     assert prompt == (
         "The chatlog is placed in the working directory. "
         "You are 'Front' in the chatlog.\n\nFRONT GUIDE"
     )
     assert cwd == gen_dir(tmp_path, 1)
     assert (cwd / "chatlog.md").read_text() == f"[Developer] {REQUEST}\n"
+    # The run posts as a participant of this conversation, so an answer to
+    # whatever it says elsewhere comes back here.
+    assert home == (CHANNEL, TOPIC)
 
 
 def test_a_run_that_writes_nothing_is_the_normal_case(monkeypatch, tmp_path):
@@ -133,7 +155,7 @@ def test_a_run_that_writes_nothing_is_the_normal_case(monkeypatch, tmp_path):
     calls = []
     wire(monkeypatch, tmp_path, calls, answer="I cannot do that.")
     zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
-    assert calls[-2][3] == "I cannot do that."
+    assert replies(calls)[-1] == "@**Developer**\n\nI cannot do that."
     assert sorted(p.name for p in gen_dir(tmp_path, 1).iterdir()) == ["chatlog.md", "tools"]
 
 
@@ -169,7 +191,7 @@ def test_an_empty_board_does_not_stop_the_run(monkeypatch, tmp_path):
     wire(monkeypatch, tmp_path, calls, answer="nobody to ask")
     zulip_listener.handle_topic(Client(calls, board={}), CHANNEL, TOPIC)
     assert any(call[0] == "front" for call in calls)
-    assert calls[-2][3] == "nobody to ask"
+    assert replies(calls)[-1] == "@**Developer**\n\nnobody to ask"
 
 
 # --- attributability --------------------------------------------------------
@@ -195,12 +217,14 @@ def test_a_front_failure_names_its_step(monkeypatch, tmp_path):
     calls = []
     wire(monkeypatch, tmp_path, calls)
 
-    def explode(prompt, cwd):
+    def explode(prompt, cwd, home):
         raise zulip_listener.ListenerError("claude_code timed out")
 
     monkeypatch.setattr(zulip_listener, "run_front", explode)
     zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
-    assert calls[-1][3] == "failed during front: claude_code timed out"
+    assert replies(calls)[-1] == (
+        "@**Developer**\n\nfailed during front: claude_code timed out"
+    )
 
 
 def test_each_serving_gets_its_own_generation(monkeypatch, tmp_path):
@@ -240,3 +264,102 @@ def test_guide_refuses_to_start_without_the_file(monkeypatch, tmp_path):
     monkeypatch.setattr(zulip_listener, "GUIDES", tmp_path)
     with pytest.raises(GuideError):
         zulip_listener.guide("front", "guide.md")
+
+
+# --- the callback: served because somebody named Front ---------------------
+
+
+REMOTE_CHANNEL = "work-s2-10"
+REMOTE_TOPIC = "workrun-task1-s2-10"
+
+
+class Board(Client):
+    """A client that holds more than one conversation."""
+
+    def __init__(self, calls, histories, board=None):
+        super().__init__(calls, board=board)
+        self.histories = dict(histories)
+
+    def topic_history(self, channel, topic, num_before):
+        if channel == agents_md.AGENTS_CHANNEL:
+            return [message(sender_id=13, name="Forge", content=self.board[topic], id=99)]
+        self.calls.append(("history", channel, topic, num_before))
+        return list(self.histories.get((channel, topic), []))
+
+
+def remote_message(content="task 1 is blocked, what now?", sender_id=11, name="Autolab"):
+    return {
+        "id": 7,
+        "type": "stream",
+        "sender_id": sender_id,
+        "sender_full_name": name,
+        "display_recipient": REMOTE_CHANNEL,
+        "subject": REMOTE_TOPIC,
+        "content": content,
+    }
+
+
+def test_a_mention_serves_the_front_topic_it_was_sent_on_behalf_of(monkeypatch, tmp_path):
+    """The whole of p7 for Front: the request it is supervising is the run's
+    subject, and the answer goes where the question was asked."""
+    calls = []
+    ledger = tmp_path / "ledger.jsonl"
+    wire(monkeypatch, tmp_path, calls, answer="yes, that is done", ledger=ledger)
+    participation.record(
+        ledger,
+        remote=participation.Conversation(REMOTE_CHANNEL, REMOTE_TOPIC),
+        home=participation.Conversation(CHANNEL, TOPIC),
+        message_id=5,
+    )
+    client = Board(calls, {
+        (CHANNEL, TOPIC): [message()],
+        (REMOTE_CHANNEL, REMOTE_TOPIC): [remote_message()],
+    })
+
+    zulip_listener.handle_mention(client, REMOTE_CHANNEL, REMOTE_TOPIC)
+
+    # The chatlog is the front conversation; the remote is a thread beside it.
+    _, cwd, home = next((c[1], c[2], c[3]) for c in calls if c[0] == "front")
+    assert home == (CHANNEL, TOPIC)
+    assert (cwd / "chatlog.md").read_text() == f"[Developer] {REQUEST}\n"
+    thread = cwd / "threads" / REMOTE_CHANNEL / f"{REMOTE_TOPIC}.md"
+    assert "task 1 is blocked" in thread.read_text()
+    # Everything posted went to the topic that called Front back.
+    assert {c[1] for c in calls if c[0] == "reply"} == {REMOTE_CHANNEL}
+    assert replies(calls)[-1] == "@**Autolab**\n\nyes, that is done"
+
+
+def test_the_threads_are_named_in_the_prompt(monkeypatch, tmp_path):
+    calls = []
+    ledger = tmp_path / "ledger.jsonl"
+    wire(monkeypatch, tmp_path, calls, ledger=ledger)
+    participation.record(
+        ledger,
+        remote=participation.Conversation(REMOTE_CHANNEL, REMOTE_TOPIC),
+        home=participation.Conversation(CHANNEL, TOPIC),
+        message_id=5,
+    )
+    client = Board(calls, {
+        (CHANNEL, TOPIC): [message()],
+        (REMOTE_CHANNEL, REMOTE_TOPIC): [remote_message()],
+    })
+    zulip_listener.handle_topic(client, CHANNEL, TOPIC)
+    prompt = next(c[1] for c in calls if c[0] == "front")
+    assert f'"threads/{REMOTE_CHANNEL}/{REMOTE_TOPIC}.md"' in prompt
+
+
+def test_a_first_request_carries_no_sentence_about_threads(monkeypatch, tmp_path):
+    calls = []
+    wire(monkeypatch, tmp_path, calls)
+    zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
+    prompt = next(c[1] for c in calls if c[0] == "front")
+    assert "threads" not in prompt
+
+
+def test_a_mention_nothing_was_sent_from_costs_no_run(monkeypatch, tmp_path):
+    """Front's entrance is `#front`. Being named somewhere it never wrote is
+    not a request to it."""
+    calls = []
+    wire(monkeypatch, tmp_path, calls)
+    zulip_listener.handle_mention(Client(calls), "general", "somebody-elses-topic")
+    assert calls == []
