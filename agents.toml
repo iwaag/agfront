@@ -1,4 +1,4 @@
-schema = "ag.agent-config.v1"
+schema = "ag.agent-config.v2"
 project = "agfront"
 
 [models."ollama/qwen3.6:35b-a3b-coding-nvfp4"]
@@ -17,6 +17,12 @@ model = "anthropic/claude-sonnet-5"
 harness = "fake"
 model = "ollama/qwen3.6:35b-a3b-coding-nvfp4"
 
+# Front routes; it does not do the work. The reading tools are for the
+# chatlog and `tools/agents.md` in its own workspace, and `agentchat` is how
+# it reaches the agent that does the work. This is the role's definition, not
+# a fence: without a grant claude_code sits on an interactive permission
+# prompt until the timeout (ag.agent-config.v2 makes the grant part of the role).
 [roles.front]
 profile = "sonnet"
 requires = []
+allowed_tools = "Read,Glob,Grep,Bash(agentchat:*)"

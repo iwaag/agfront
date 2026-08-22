@@ -1,10 +1,9 @@
-"""agfront's chat entrance: serve `front-*` topics, and let Front do the rest.
+"""Serving a `front-*` topic: two files, one run, one reply at home.
 
-The mechanics are pyagag's, shared with the other agents' listeners:
-`agag.zulip.sweep_serve` finds every unresolved `front-*` topic whose last
-poster is not this bot, and `agag.topics.serve_topic` serves each one — ack,
-numbered generation workspace, `chatlog.md`, the run, always reply, then
-re-check for posts that arrived during the run.
+The listener is `agfront.listener` (`agag.agent.listener_main` over Front's
+`SPEC`); `agag.topics.serve_topic` serves each swept topic — ack, numbered
+generation workspace, `chatlog.md`, the run, always reply, then re-check for
+posts that arrived during the run.
 
 What is agfront's own is now two files and no routing at all: `chatlog.md`,
 the conversation, and `tools/agents.md`, the other agents' own introductions
@@ -49,22 +48,23 @@ the mark.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
+from agag.agent import SWEEP_ACK as ACK_TEXT, is_ack, run_role
+from agag.entrance import EMPTY_REPLY
 from agag.topics import (
     TopicResult,
     chatlog_placement,
     chatlog_path,
     format_chatlog,
-    generation_dir as shared_generation_dir,
+    generation_dir,
     guide as shared_guide,
     next_generation,
-    next_record_path as shared_next_record_path,
+    next_record_path,
     prompt_with_guide,
     serve_topic,
     threads_placement,
-    topic_workspace as shared_topic_workspace,
+    topic_workspace,
     write_threads,
 )
 from agag.intro import write_agents_md
@@ -74,19 +74,15 @@ from agag.zulip import (
     note_served,
     remotes_for_home,
     rootchat_home,
-    sweep_serve,
 )
 
-from .role_run import AGFRONT_ROOT, ZULIP_ENV, run_role
+from .instance import SPEC
 
-TOPICS_ROOT = AGFRONT_ROOT / ".local" / "topics"
-GUIDES = AGFRONT_ROOT / "agent" / "guides"
-RECORDS_ROOT = AGFRONT_ROOT / ".local" / "agent"
-
-FRONT_TOPIC_PREFIX = "front-"
-
-ACK_TEXT = "Message received. Please wait for the reply."
-EMPTY_REPLY = "There is nothing in this topic to answer yet."
+# The skeleton's paths, named here so a test can point a serving elsewhere.
+ZULIP_ENV = SPEC.zulip_env
+TOPICS_ROOT = SPEC.topics_root
+GUIDES = SPEC.guides
+RECORDS_ROOT = SPEC.records_root
 
 # Front reads a conversation, reads the board, and posts a message or two. It
 # generates, builds and runs nothing, and it no longer waits for anybody:
@@ -102,18 +98,15 @@ EMPTY_REPLY = "There is nothing in this topic to answer yet."
 FRONT_TIMEOUT_SECONDS = 360
 
 __all__ = [
+    "SPEC",
     "ZULIP_ENV",
     "ListenerError",
     "front_prompt",
-    "generation_dir",
     "guide",
     "handle_mention",
     "handle_topic",
-    "main",
-    "observe_topic",
     "run_front",
     "serve",
-    "topic_workspace",
 ]
 
 
@@ -121,31 +114,8 @@ class ListenerError(RuntimeError):
     """One front-topic workflow could not complete."""
 
 
-def topic_workspace(channel: str, topic: str) -> Path:
-    """`.local/topics/<channel>/<topic>/` — the conversation's own directory."""
-    return shared_topic_workspace(TOPICS_ROOT, channel, topic)
-
-
-def generation_dir(channel: str, topic: str, number: int, role: str) -> Path:
-    """`.local/topics/<channel>/<topic>/<N>/<role>/`.
-
-    Generations are never deleted, so each turn of a conversation keeps the
-    board it actually saw beside the chatlog it actually read.
-    """
-    return shared_generation_dir(TOPICS_ROOT, channel, topic, number, role)
-
-
 def guide(*parts: str) -> str:
     return shared_guide(GUIDES, *parts)
-
-
-def next_record_path(directory: Path) -> Path:
-    return shared_next_record_path(directory)
-
-
-def is_ack(content: str) -> bool:
-    """Our own transport noise, which is not conversation."""
-    return content == ACK_TEXT
 
 
 def front_prompt(bot_name: str, threads=(), root: Path | None = None) -> str:
@@ -169,6 +139,7 @@ def run_front(prompt: str, cwd: Path, home: tuple[str, str]) -> str:
     """
     record = next_record_path(RECORDS_ROOT / "front")
     output, _, exit_code = run_role(
+        SPEC,
         "front",
         prompt,
         cwd=cwd,
@@ -189,8 +160,8 @@ def serve(context) -> TopicResult:
     board (`tools/agents.md`). One of the threads is usually why this run is
     happening at all.
     """
-    number = next_generation(topic_workspace(context.channel, context.topic))
-    front_dir = generation_dir(context.channel, context.topic, number, "front")
+    number = next_generation(topic_workspace(TOPICS_ROOT, context.channel, context.topic))
+    front_dir = generation_dir(TOPICS_ROOT, context.channel, context.topic, number, "front")
     chatlog_path(front_dir).write_text(
         format_chatlog(context.history, context.self_id, drop=is_ack), encoding="utf-8"
     )
@@ -269,42 +240,3 @@ def handle_mention(client: ZulipClient, channel: str, topic: str) -> None:
         log(f"nothing to mark served in {channel!r}/{topic!r}")
     else:
         log(f"marked {channel!r}/{topic!r} served up to {served} in {home}")
-
-
-def observe_topic(channel: str, topic: str) -> None:
-    """Passive handler (`AGFRONT_ZULIP_LOG_ONLY=1`): log sweep matches, never act."""
-    log(f"observed sweep match {channel!r}/{topic!r}")
-
-
-def main() -> None:
-    client = ZulipClient.from_env(ZULIP_ENV)
-    if os.environ.get("AGFRONT_ZULIP_LOG_ONLY") == "1":
-        handler = observe_topic
-        mention_handler = observe_topic
-    else:
-        def handler(channel: str, topic: str) -> None:
-            handle_topic(client, channel, topic)
-
-        def mention_handler(channel: str, topic: str) -> None:
-            handle_mention(client, channel, topic)
-
-    # The filter is `front-` only, which is what keeps Front from answering
-    # the topics it opens elsewhere: no bot loop, by filter and not by luck.
-    # The other side of the same asymmetry is agforge, which sweeps its own
-    # `assetplan-` topics and never `front-`.
-    log(
-        "agfront zulip listener starting "
-        f"(pull sweep, prefix {FRONT_TOPIC_PREFIX!r}, plus mentions)"
-    )
-    try:
-        sweep_serve(
-            client, handler,
-            topic_filter=(FRONT_TOPIC_PREFIX,),
-            on_mention=mention_handler,
-        )
-    except KeyboardInterrupt:
-        log("stopped")
-
-
-if __name__ == "__main__":
-    main()

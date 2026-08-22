@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 dependencies = ["pyagag"]
 
 [project.scripts]
-agfront-zulip-listener = "agfront.zulip_listener:main"
+agfront-zulip-listener = "agfront.listener:main"
 
 [dependency-groups]
 dev = ["pytest"]

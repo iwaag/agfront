@@ -400,3 +400,23 @@ def test_a_mention_in_a_topic_front_never_anchored_costs_no_run(monkeypatch, tmp
     client = Board(calls, {("general", "somebody-elses-topic"): [remote_message()]})
     zulip_listener.handle_mention(client, "general", "somebody-elses-topic")
     assert [call[0] for call in calls] == ["whoami", "history"]
+
+
+# --- the listener entry ------------------------------------------------------
+
+
+def test_the_listener_is_the_skeleton_with_one_route_and_the_mention_route(monkeypatch):
+    from agfront import listener
+
+    handed = {}
+    monkeypatch.setattr(
+        listener, "listener_main",
+        lambda spec, routes, **kw: handed.update(spec=spec, routes=routes, **kw),
+    )
+    listener.main()
+    assert handed["spec"] is zulip_listener.SPEC
+    assert handed["routes"] == {"front-": zulip_listener.handle_topic}
+    assert handed["on_mention"] is zulip_listener.handle_mention
+    # `front-` is the only prefix swept: Front never answers the topics it
+    # opens elsewhere, by filter and not by luck.
+    assert zulip_listener.SPEC.sweep_prefixes == ("front-",)
