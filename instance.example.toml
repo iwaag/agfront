@@ -1,0 +1,10 @@
+# Copy to .local/instance.toml and set the real name.
+#
+# <agent>-<instance label><N>: the label is the host this instance runs on,
+# the number distinguishes instances sharing a host. Front is the Developer's
+# own agent and is served in `#front` (its `front-` topics), so the name is
+# what the skeleton's own-channel sweep and `front-…` prefix key on; a
+# channel of that exact name need not exist.
+#
+# Local-only because the label is host information (devdocs/README_DEV.md).
+name = "front-<host><N>"
