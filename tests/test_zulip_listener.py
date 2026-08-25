@@ -181,6 +181,17 @@ def test_the_intro_harvest_lands_in_tools_before_the_run(monkeypatch, tmp_path):
     assert INTRO_BODY in seen["text"]
 
 
+def test_schedule_usage_lands_in_tools_before_the_run(monkeypatch, tmp_path):
+    calls = []
+    seen = {}
+    wire(
+        monkeypatch, tmp_path, calls,
+        run=lambda cwd: seen.update(text=(cwd / "tools" / "schedule.md").read_text()),
+    )
+    zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
+    assert "rtschedule add-decide" in seen["text"]
+
+
 def test_a_run_sees_the_board_as_it_was_at_that_moment(monkeypatch, tmp_path):
     calls = []
     wire(monkeypatch, tmp_path, calls)

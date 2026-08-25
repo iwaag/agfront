@@ -84,6 +84,25 @@ TOPICS_ROOT = SPEC.topics_root
 GUIDES = SPEC.guides
 RECORDS_ROOT = SPEC.records_root
 
+SCHEDULE_TOOL_DOC = """# Routine schedule
+
+`rtschedule` is the only schedule write tool. It changes only the ignored
+clone of `autodev/rtschedule` and commits and pushes each mutation. Times are
+ISO-8601 with a timezone. Run `rtschedule --help` or a subcommand's `--help`
+for the exact flags.
+
+Commands:
+
+- `rtschedule show`
+- `rtschedule now`
+- `rtschedule add-request --text TEXT --until TIME [--said-at TIME]`
+- `rtschedule add-fire --from REQUEST_ID --at TIME --routine NAME`
+- `rtschedule add-decide --from REQUEST_ID --at TIME --ask QUESTION`
+- `rtschedule move EVENT_ID --at TIME`
+- `rtschedule remove EVENT_ID`
+- `rtschedule set-until REQUEST_ID --until TIME`
+"""
+
 # Front reads a conversation, reads the board, and posts a message or two. It
 # generates, builds and runs nothing, and it no longer waits for anybody:
 # 360 s, the pre-p5 ceiling, restored in `agent_standardize` p7.
@@ -182,6 +201,7 @@ def serve(context) -> TopicResult:
 
     context.step = "harvest"
     write_agents_md(context.client, front_dir)
+    (front_dir / "tools" / "schedule.md").write_text(SCHEDULE_TOOL_DOC, encoding="utf-8")
 
     context.step = "front"
     return TopicResult([

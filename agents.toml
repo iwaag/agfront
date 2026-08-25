@@ -25,4 +25,4 @@ model = "ollama/qwen3.8:27b-mlx-bf16"
 [roles.front]
 profile = "sonnet"
 requires = []
-allowed_tools = "Read,Glob,Grep,Bash(agentchat:*)"
+allowed_tools = "Read,Glob,Grep,Bash(agentchat:*),Bash(rtschedule:*)"
