@@ -97,8 +97,8 @@ def wire(monkeypatch, tmp_path, calls, *, answer="on it", run=None):
         ),
     )
 
-    def front_run(prompt, cwd, home):
-        calls.append(("front", prompt, cwd, home))
+    def front_run(prompt, cwd, home, role="front"):
+        calls.append(("front", prompt, cwd, home, role))
         if run is not None:
             run(cwd)
         return answer
@@ -107,6 +107,8 @@ def wire(monkeypatch, tmp_path, calls, *, answer="on it", run=None):
     guides = tmp_path / "guides"
     (guides / "front").mkdir(parents=True)
     (guides / "front" / "guide.md").write_text("FRONT GUIDE")
+    (guides / "character_talk").mkdir(parents=True)
+    (guides / "character_talk" / "guide.md").write_text("CHARACTER GUIDE")
     monkeypatch.setattr(zulip_listener, "GUIDES", guides)
 
 
@@ -234,7 +236,7 @@ def test_a_front_failure_names_its_step(monkeypatch, tmp_path):
     calls = []
     wire(monkeypatch, tmp_path, calls)
 
-    def explode(prompt, cwd, home):
+    def explode(prompt, cwd, home, role="front"):
         raise zulip_listener.ListenerError("claude_code timed out")
 
     monkeypatch.setattr(zulip_listener, "run_front", explode)
@@ -411,6 +413,111 @@ def test_a_mention_in_a_topic_front_never_anchored_costs_no_run(monkeypatch, tmp
     client = Board(calls, {("general", "somebody-elses-topic"): [remote_message()]})
     zulip_listener.handle_mention(client, "general", "somebody-elses-topic")
     assert [call[0] for call in calls] == ["whoami", "history"]
+
+
+# --- the Front Desk: a conversation chooses its role (front_desk p1) ---------
+
+
+DESK_TOPIC = "front-desk-20260908-1530"
+
+
+def desk_message(content="やっほー", id=1):
+    return {**message(content=content, id=id), "subject": DESK_TOPIC}
+
+
+def role_calls(calls):
+    return [(call[3], call[4]) for call in calls if call[0] == "front"]
+
+
+def test_a_front_desk_topic_is_served_by_character_talk_with_its_own_guide(monkeypatch, tmp_path):
+    """The voice is the guide, not the role's name: a `front-desk-` serving
+    runs `character_talk` and its prompt carries that guide and no other."""
+    calls = []
+    wire(monkeypatch, tmp_path, calls, answer="やっほー✨")
+    zulip_listener.handle_topic(Client(calls, history=[desk_message()]), CHANNEL, DESK_TOPIC)
+    assert role_calls(calls) == [((CHANNEL, DESK_TOPIC), "character_talk")]
+    prompt = next(c[1] for c in calls if c[0] == "front")
+    assert "CHARACTER GUIDE" in prompt and "FRONT GUIDE" not in prompt
+    # Its workspace is filed under the role, like its run record.
+    cwd = next(c[2] for c in calls if c[0] == "front")
+    assert cwd == tmp_path / "topics" / CHANNEL / DESK_TOPIC / "1" / "character_talk"
+    assert (cwd / "chatlog.md").read_text() == "[Developer] やっほー\n"
+    assert replies(calls)[-1] == "@**Developer**\n\nやっほー✨"
+
+
+def test_an_ordinary_front_topic_is_still_served_by_front(monkeypatch, tmp_path):
+    calls = []
+    wire(monkeypatch, tmp_path, calls)
+    zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
+    assert role_calls(calls) == [((CHANNEL, TOPIC), "front")]
+    prompt = next(c[1] for c in calls if c[0] == "front")
+    assert "FRONT GUIDE" in prompt and "CHARACTER GUIDE" not in prompt
+
+
+def test_the_role_is_the_prefix_and_nothing_else():
+    assert zulip_listener.role_for("front", "front-desk-abc") == "character_talk"
+    assert zulip_listener.role_for("front", "front-desk-") == "character_talk"
+    assert zulip_listener.role_for("front", "front-20260817-p2-chat") == "front"
+    assert zulip_listener.role_for("front", "front-routine-ghtrends-2026-09-07T07:00Z") == "front"
+    # A remote topic never decides the role; only the home does.
+    assert zulip_listener.role_for("work-s2-10", "workrun-task1-s2-10") == "front"
+
+
+def test_a_callback_into_a_front_desk_conversation_keeps_its_voice(monkeypatch, tmp_path):
+    """The role is chosen from the **home** the root note names, so autolab
+    naming Front in its own topic brings back the Front Desk voice when that
+    is where the request came from — and answers there, at home."""
+    calls = []
+    wire(monkeypatch, tmp_path, calls, answer="できたよ🎉")
+    note = {**root_note(), "content": rootchat_note(Conversation(CHANNEL, DESK_TOPIC))}
+    client = Board(calls, {
+        (CHANNEL, DESK_TOPIC): [desk_message("ghtrends をお願い")],
+        (REMOTE_CHANNEL, REMOTE_TOPIC): [note, remote_message("done: repo x, 123 stars")],
+    })
+    zulip_listener.handle_mention(client, REMOTE_CHANNEL, REMOTE_TOPIC)
+    assert role_calls(calls) == [((CHANNEL, DESK_TOPIC), "character_talk")]
+    prompt, cwd = next((c[1], c[2]) for c in calls if c[0] == "front")
+    assert "CHARACTER GUIDE" in prompt
+    assert "done: repo x" in (cwd / "threads" / REMOTE_CHANNEL / f"{REMOTE_TOPIC}.md").read_text()
+    assert {c[1] for c in calls if c[0] == "reply"} == {CHANNEL}
+    assert [c for c in calls if c[0] == "reply"][-1][2] == DESK_TOPIC
+    assert [c for c in calls if c[0] == "post"] == [
+        ("post", CHANNEL, DESK_TOPIC, f"[selfnote][served] {REMOTE_CHANNEL}/{REMOTE_TOPIC} 7"),
+    ]
+
+
+def test_a_callback_into_an_ordinary_conversation_keeps_the_front_voice(monkeypatch, tmp_path):
+    calls = []
+    wire(monkeypatch, tmp_path, calls)
+    client = Board(calls, {
+        (CHANNEL, TOPIC): [message()],
+        (REMOTE_CHANNEL, REMOTE_TOPIC): [root_note(), remote_message()],
+    })
+    zulip_listener.handle_mention(client, REMOTE_CHANNEL, REMOTE_TOPIC)
+    assert role_calls(calls) == [((CHANNEL, TOPIC), "front")]
+
+
+def test_a_front_desk_failure_names_its_role(monkeypatch, tmp_path):
+    calls = []
+    wire(monkeypatch, tmp_path, calls)
+
+    def explode(prompt, cwd, home, role="front"):
+        raise zulip_listener.ListenerError(f"{role} run exited 1")
+
+    monkeypatch.setattr(zulip_listener, "run_front", explode)
+    zulip_listener.handle_topic(Client(calls, history=[desk_message()]), CHANNEL, DESK_TOPIC)
+    assert replies(calls)[-1] == "@**Developer**\n\nfailed during character_talk: character_talk run exited 1"
+
+
+def test_the_character_guide_exists_and_names_both_voices():
+    """The guide is read from disk per run; a missing one is a run with no
+    instruction. It has to define the two voices and the event-driven turn,
+    and must not carry the old `agentchat wait` advice."""
+    text = zulip_listener.guide("character_talk", "guide.md")
+    assert "ギャル" in text
+    assert "agentchat send" in text
+    assert "agentchat wait" not in text
+    assert "read --since" in text or "--since" in text
 
 
 # --- the listener entry ------------------------------------------------------

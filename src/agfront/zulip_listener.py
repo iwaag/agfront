@@ -38,6 +38,14 @@ which home to serve instead of asking a ledger file — and a called-back run
 developer") is true. Anything Front wants to say to the other agent is a
 deliberate `agentchat send`, never a reply by reflex.
 
+**Since `front_desk` p1 a conversation chooses its role.** A `front-desk-…`
+topic — the graphic-novel screen in agdevworld — is served by the
+`character_talk` role with its own guide and profile; every other `front-*`
+topic is served by `front` as before. The choice is made from the **home**
+conversation, so a callback into a Front Desk conversation is answered in the
+same voice the conversation was opened in. Nothing else differs: same files,
+same `agentchat`, same reply-at-home.
+
 **Since p9 a served callback is marked.** Answering at home means Front never
 becomes the last poster in the topic that called it, so recovery would find
 that topic still naming Front and serve the exchange again on every restart.
@@ -78,6 +86,12 @@ from agag.zulip import (
 
 from .instance import SPEC
 
+#: The Front Desk's conversations: `#front` › `front-desk-<id>`. Inside the
+#: `front-` sweep, so no listener change routes them; only the role differs.
+FRONT_DESK_PREFIX = "front-desk-"
+CHARACTER_ROLE = "character_talk"
+FRONT_ROLE = "front"
+
 # The skeleton's paths, named here so a test can point a serving elsewhere.
 ZULIP_ENV = SPEC.zulip_env
 TOPICS_ROOT = SPEC.topics_root
@@ -117,6 +131,9 @@ Commands:
 FRONT_TIMEOUT_SECONDS = 360
 
 __all__ = [
+    "CHARACTER_ROLE",
+    "FRONT_DESK_PREFIX",
+    "FRONT_ROLE",
     "SPEC",
     "ZULIP_ENV",
     "ListenerError",
@@ -124,6 +141,7 @@ __all__ = [
     "guide",
     "handle_mention",
     "handle_topic",
+    "role_for",
     "run_front",
     "serve",
 ]
@@ -137,29 +155,49 @@ def guide(*parts: str) -> str:
     return shared_guide(GUIDES, *parts)
 
 
-def front_prompt(bot_name: str, threads=(), root: Path | None = None) -> str:
-    """The placement lines, then the guide.
+def role_for(channel: str, topic: str) -> str:
+    """Which role serves this conversation: the Front Desk voice for a
+    `front-desk-…` topic, the ordinary front for every other `front-*` one.
+
+    Decided from the conversation being served — the *home* — never from the
+    topic a mention arrived in, so a callback keeps the voice of the
+    conversation it belongs to.
+    """
+    del channel  # the prefix is the whole rule; `#front` is where the sweep looks
+    return CHARACTER_ROLE if topic.startswith(FRONT_DESK_PREFIX) else FRONT_ROLE
+
+
+def front_prompt(
+    bot_name: str, threads=(), root: Path | None = None, role: str = FRONT_ROLE
+) -> str:
+    """The placement lines, then the role's guide.
 
     Placement says where the files are; the guide says what to produce. The
     threads line only appears when there are threads, so a first request
-    never carries a sentence about files that are not there.
+    never carries a sentence about files that are not there. The guide is the
+    role's own (`agent/guides/<role>/guide.md`): the voice is defined there,
+    not by the role's name.
     """
     lines = [chatlog_placement(bot_name)]
     if placement := threads_placement(threads, root or Path(".")):
         lines.append(placement)
-    return prompt_with_guide(lines, guide("front", "guide.md"))
+    return prompt_with_guide(lines, guide(role, "guide.md"))
 
 
-def run_front(prompt: str, cwd: Path, home: tuple[str, str]) -> str:
-    """One front run in the topic workspace, with its `ag.agent-run.v1` record.
+def run_front(
+    prompt: str, cwd: Path, home: tuple[str, str], role: str = FRONT_ROLE
+) -> str:
+    """One run of `role` in the topic workspace, with its `ag.agent-run.v1` record.
 
     `home` is the `front-*` conversation being served. Anything this run
     posts elsewhere is recorded against it, so the answer comes back here.
+    The record is filed under the role, so a Front Desk run is told apart
+    from an ordinary front run by where its record is.
     """
-    record = next_record_path(RECORDS_ROOT / "front")
+    record = next_record_path(RECORDS_ROOT / role)
     output, _, exit_code = run_role(
         SPEC,
-        "front",
+        role,
         prompt,
         cwd=cwd,
         timeout=FRONT_TIMEOUT_SECONDS,
@@ -167,7 +205,7 @@ def run_front(prompt: str, cwd: Path, home: tuple[str, str]) -> str:
         home=home,
     )
     if exit_code != 0:
-        raise ListenerError(f"front run exited {exit_code}: {output.strip()[:500]}")
+        raise ListenerError(f"{role} run exited {exit_code}: {output.strip()[:500]}")
     return output.strip()
 
 
@@ -179,8 +217,9 @@ def serve(context) -> TopicResult:
     board (`tools/agents.md`). One of the threads is usually why this run is
     happening at all.
     """
+    role = role_for(context.channel, context.topic)
     number = next_generation(topic_workspace(TOPICS_ROOT, context.channel, context.topic))
-    front_dir = generation_dir(TOPICS_ROOT, context.channel, context.topic, number, "front")
+    front_dir = generation_dir(TOPICS_ROOT, context.channel, context.topic, number, role)
     chatlog_path(front_dir).write_text(
         format_chatlog(context.history, context.self_id, drop=is_ack), encoding="utf-8"
     )
@@ -203,12 +242,13 @@ def serve(context) -> TopicResult:
     write_agents_md(context.client, front_dir)
     (front_dir / "tools" / "schedule.md").write_text(SCHEDULE_TOOL_DOC, encoding="utf-8")
 
-    context.step = "front"
+    context.step = role
     return TopicResult([
         run_front(
-            front_prompt(context.bot_name, threads, front_dir),
+            front_prompt(context.bot_name, threads, front_dir, role),
             front_dir,
             (context.channel, context.topic),
+            role,
         )
     ])
 

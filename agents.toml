@@ -72,3 +72,17 @@ model = "openai/gpt-5.4-mini"
 profile = "sonnet"
 requires = []
 allowed_tools = "Read,Glob,Grep,Bash(agentchat:*),Bash(rtschedule:*)"
+
+# The Front Desk voice (front_desk p1). The same reading tools and the same
+# one route to other agents as `front`; what differs is the guide the
+# listener pairs with it (`agent/guides/character_talk/guide.md`) and that its
+# profile is its own, so the Front Desk can be moved to another harness or
+# model without touching the ordinary entrance. It starts on front's model.
+[profiles.character_talk]
+harness = "claude_code"
+model = "anthropic/claude-sonnet-5"
+
+[roles.character_talk]
+profile = "character_talk"
+requires = []
+allowed_tools = "Read,Glob,Grep,Bash(agentchat:*),Bash(rtschedule:*)"
