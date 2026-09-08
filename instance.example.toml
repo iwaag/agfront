@@ -8,3 +8,11 @@
 #
 # Local-only because the label is host information (devdocs/README_DEV.md).
 name = "front-<host><N>"
+
+# Where the settings repository is synced (front_desk p2): the directory
+# `agentroom-settings sync` writes — `active.json`, `revisions/<sha>/`,
+# `current/`. Optional; the default is the sibling checkout's
+# `../agdevworld/.local/settings`, and `AGFRONT_SETTINGS_ROOT` overrides both.
+# A Front Desk run pins the active revision at its start and copies the
+# characters' lore into its workspace as `characters.md`.
+# settings_root = "../agdevworld/.local/settings"

@@ -46,6 +46,18 @@ conversation, so a callback into a Front Desk conversation is answered in the
 same voice the conversation was opened in. Nothing else differs: same files,
 same `agentchat`, same reply-at-home.
 
+**Since `front_desk` p2 a Front Desk run is given its characters and its
+evidence.** The character definition is no longer in the guide: the settings
+repository agdevworld syncs (`agfront.settings`) is pinned to one revision at
+the start of the serving and copied into the workspace as `characters.md` —
+every character's whole lore, and which agents speak as which — so a sync
+that lands mid-run changes the next run, not this one. The chatlog and the
+threads of that run are rendered by `agfront.evidence` rather than the shared
+`format_chatlog`: same conversations, with the message ids, sender ids and
+topic names kept, so a line given to another character can cite the post it
+came from; a bounded or unreadable thread says so in the file. The pinned
+revision is stamped into the run record.
+
 **Since p9 a served callback is marked.** Answering at home means Front never
 becomes the last poster in the topic that called it, so recovery would find
 that topic still naming Front and serve the exchange again on every restart.
@@ -56,11 +68,13 @@ the mark.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from agag.agent import SWEEP_ACK as ACK_TEXT, is_ack, run_role
 from agag.entrance import EMPTY_REPLY
 from agag.topics import (
+    HISTORY_MESSAGES,
     TopicResult,
     chatlog_placement,
     chatlog_path,
@@ -84,7 +98,10 @@ from agag.zulip import (
     rootchat_home,
 )
 
+from .evidence import format_evidence, write_evidence_threads
 from .instance import SPEC
+from .settings import SettingsUnavailable, characters_markdown, pin
+
 
 #: The Front Desk's conversations: `#front` › `front-desk-<id>`. Inside the
 #: `front-` sweep, so no listener change routes them; only the role differs.
@@ -137,6 +154,7 @@ __all__ = [
     "SPEC",
     "ZULIP_ENV",
     "ListenerError",
+    "characters_placement",
     "front_prompt",
     "guide",
     "handle_mention",
@@ -167,8 +185,21 @@ def role_for(channel: str, topic: str) -> str:
     return CHARACTER_ROLE if topic.startswith(FRONT_DESK_PREFIX) else FRONT_ROLE
 
 
+def characters_placement(revision: str | None, reason: str | None = None) -> str:
+    """One line saying where the characters are — or that they are not.
+
+    A run without settings is told so in the placement rather than handed a
+    guide that presumes a file: the guide then says what to do in that case.
+    """
+    if revision:
+        return (f"The characters are placed beside it in \"characters.md\" "
+                f"(settings revision {revision}); the section marked as you is who you are.")
+    return f"No character settings are available for this run ({reason or 'unknown reason'})."
+
+
 def front_prompt(
-    bot_name: str, threads=(), root: Path | None = None, role: str = FRONT_ROLE
+    bot_name: str, threads=(), root: Path | None = None, role: str = FRONT_ROLE,
+    *, characters: str | None = None,
 ) -> str:
     """The placement lines, then the role's guide.
 
@@ -176,23 +207,28 @@ def front_prompt(
     threads line only appears when there are threads, so a first request
     never carries a sentence about files that are not there. The guide is the
     role's own (`agent/guides/<role>/guide.md`): the voice is defined there,
-    not by the role's name.
+    not by the role's name. `characters` is the Front Desk's placement line
+    for `characters.md`, present only for that role.
     """
     lines = [chatlog_placement(bot_name)]
     if placement := threads_placement(threads, root or Path(".")):
         lines.append(placement)
+    if characters:
+        lines.append(characters)
     return prompt_with_guide(lines, guide(role, "guide.md"))
 
 
 def run_front(
-    prompt: str, cwd: Path, home: tuple[str, str], role: str = FRONT_ROLE
+    prompt: str, cwd: Path, home: tuple[str, str], role: str = FRONT_ROLE,
+    *, extra_meta: dict | None = None,
 ) -> str:
     """One run of `role` in the topic workspace, with its `ag.agent-run.v1` record.
 
     `home` is the `front-*` conversation being served. Anything this run
     posts elsewhere is recorded against it, so the answer comes back here.
     The record is filed under the role, so a Front Desk run is told apart
-    from an ordinary front run by where its record is.
+    from an ordinary front run by where its record is. `extra_meta` is
+    stamped into the record — the settings revision a Front Desk run drew on.
     """
     record = next_record_path(RECORDS_ROOT / role)
     output, _, exit_code = run_role(
@@ -203,6 +239,7 @@ def run_front(
         timeout=FRONT_TIMEOUT_SECONDS,
         record=record,
         home=home,
+        extra_meta=extra_meta or None,
     )
     if exit_code != 0:
         raise ListenerError(f"{role} run exited {exit_code}: {output.strip()[:500]}")
@@ -215,28 +252,60 @@ def serve(context) -> TopicResult:
     Three kinds of file now: the conversation being served (`chatlog.md`),
     the conversations Front has taken part in elsewhere (`threads/`), and the
     board (`tools/agents.md`). One of the threads is usually why this run is
-    happening at all.
+    happening at all. A Front Desk serving gets a fourth, `characters.md`,
+    and its chatlog and threads keep their message ids (`agfront.evidence`).
     """
     role = role_for(context.channel, context.topic)
+    desk = role == CHARACTER_ROLE
     number = next_generation(topic_workspace(TOPICS_ROOT, context.channel, context.topic))
     front_dir = generation_dir(TOPICS_ROOT, context.channel, context.topic, number, role)
-    chatlog_path(front_dir).write_text(
-        format_chatlog(context.history, context.self_id, drop=is_ack), encoding="utf-8"
-    )
+
+    settings = None
+    settings_note = None
+    if desk:
+        # Pinned before anything else is written, so every file of this
+        # serving is of one revision.
+        context.step = "settings"
+        try:
+            settings = pin()
+        except SettingsUnavailable as error:
+            settings_note = str(error)
+            log(f"character settings unavailable: {error}")
+        else:
+            (front_dir / "characters.md").write_text(characters_markdown(settings), encoding="utf-8")
+            (front_dir / "settings.json").write_text(
+                json.dumps({"schema": "ag.frontdesk-settings.v1", "revision": settings.revision,
+                            "root": str(settings.root),
+                            "characters": {c.id: {"name": c.name, "nickname": c.nickname,
+                                                  "agents": list(c.agents)}
+                                           for c in settings.characters.values()}},
+                           ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
+    context.step = "chatlog"
+    if desk:
+        chatlog_path(front_dir).write_text(
+            format_evidence(context.history, context.self_id, channel=context.channel,
+                            topic=context.topic, drop=is_ack,
+                            bounded=len(context.history) >= HISTORY_MESSAGES,
+                            history_messages=HISTORY_MESSAGES),
+            encoding="utf-8",
+        )
+    else:
+        chatlog_path(front_dir).write_text(
+            format_chatlog(context.history, context.self_id, drop=is_ack), encoding="utf-8"
+        )
 
     context.step = "threads"
-    threads = write_threads(
-        context.client,
-        front_dir,
-        [
-            conversation.as_pair()
-            for conversation in remotes_for_home(
-                context.client, context.channel, context.topic
-            )
-        ],
-        context.self_id,
-        drop=is_ack,
-    )
+    remotes = [
+        conversation.as_pair()
+        for conversation in remotes_for_home(context.client, context.channel, context.topic)
+    ]
+    if desk:
+        threads = write_evidence_threads(context.client, front_dir, remotes, context.self_id, drop=is_ack)
+    else:
+        threads = write_threads(context.client, front_dir, remotes, context.self_id, drop=is_ack)
 
     context.step = "harvest"
     write_agents_md(context.client, front_dir)
@@ -245,10 +314,15 @@ def serve(context) -> TopicResult:
     context.step = role
     return TopicResult([
         run_front(
-            front_prompt(context.bot_name, threads, front_dir, role),
+            front_prompt(
+                context.bot_name, threads, front_dir, role,
+                characters=(characters_placement(settings.revision if settings else None, settings_note)
+                            if desk else None),
+            ),
             front_dir,
             (context.channel, context.topic),
             role,
+            extra_meta={"settings_revision": settings.revision} if settings else None,
         )
     ])
 
