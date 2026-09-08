@@ -64,7 +64,7 @@ _ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
 __all__ = [
     "ERROR_FENCE", "FENCE", "MAX_TURNS", "SCHEMA", "Dialogue", "DialogueError", "Turn",
-    "finish_reply", "parse_block", "render", "split_reply",
+    "finish_reply", "parse_block", "render", "split_reply", "strip_preface",
 ]
 
 
@@ -197,6 +197,29 @@ def render(reply: str, dialogue: Dialogue | None, error: str | None = None) -> s
     return "\n\n".join(part for part in parts if part)
 
 
+_JAPANESE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff]")
+
+
+def strip_preface(reply: str) -> tuple[str, str | None]:
+    """Drop a leading paragraph with no Japanese in it when a later one has some.
+
+    Three live runs in a row began with an English sentence about the message
+    ("This is just small talk…", "Now it reads correctly…") before the reply,
+    with the guide saying twice not to. The screen posts the output verbatim,
+    so the developer read the preface as dialogue. This is the smallest rule
+    that removes exactly that: a first paragraph the developer's language
+    does not appear in, ahead of one it does. The dropped text is returned
+    so it can be logged, and nothing else is rewritten.
+    """
+    parts = reply.strip().split("\n\n")
+    if len(parts) < 2:
+        return reply, None
+    first = parts[0]
+    if _JAPANESE.search(first) or not any(_JAPANESE.search(rest) for rest in parts[1:]):
+        return reply, None
+    return "\n\n".join(parts[1:]).strip(), first
+
+
 def finish_reply(
     output: str, settings: CharacterSettings | None, *, workspace: Path | None = None, log=None,
 ) -> tuple[str, Dialogue | None, str | None]:
@@ -207,6 +230,9 @@ def finish_reply(
     reason logged and written beside the run's files.
     """
     reply, body = split_reply(output)
+    reply, preface = strip_preface(reply)
+    if preface is not None and log is not None:
+        log(f"dropped a preface before the reply: {preface[:120]!r}")
     if body is None:
         return (reply if reply else output.strip()), None, None
     dialogue: Dialogue | None = None

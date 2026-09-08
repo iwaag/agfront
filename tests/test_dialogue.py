@@ -124,3 +124,18 @@ def test_render_is_reply_then_block_or_error():
     assert render("r", found).startswith("r\n\n```ag-dialogue\n{")
     assert render("r", None, "why") == 'r\n\n```ag-dialogue-error\n{"schema": "ag.frontdesk-dialogue.v1-error", "error": "why"}\n```'
     assert render("r", None) == "r"
+
+
+def test_an_english_preface_before_the_japanese_reply_is_dropped_and_logged(tmp_path):
+    """Seen live three times in front_desk p2 step 5."""
+    logged = []
+    text, _, _ = finish_reply("This is just small talk, so I'll answer in character.\n\nやっほー✨ 元気だよ〜💕",
+                              SETTINGS, workspace=tmp_path, log=logged.append)
+    assert text == "やっほー✨ 元気だよ〜💕"
+    assert logged and "preface" in logged[0]
+    # A reply that is Japanese from the first line, or English throughout, is untouched.
+    assert finish_reply("やっほー✨\n\nWhat is next?", SETTINGS, workspace=tmp_path)[0] == "やっほー✨\n\nWhat is next?"
+    assert finish_reply("All done.\n\nSee the topic.", SETTINGS, workspace=tmp_path)[0] == "All done.\n\nSee the topic."
+    # The preface goes even when a dialogue block follows.
+    text, found, _ = finish_reply(f"Now it reads correctly.\n\n{REPLY}\n\n{block(TURNS)}", SETTINGS, workspace=tmp_path)
+    assert text.startswith(REPLY) and found is not None
