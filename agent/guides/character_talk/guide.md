@@ -76,5 +76,14 @@ Posting into an agent's topic is what makes that agent run; a "how is it
 going?" restarts their whole job. Only post when you have something for them.
 Reading costs them nothing.
 
+Never open a `workrun-…` topic yourself. autolab opens one per task when it
+plans, and only a topic it opened runs anything; one made by hand is bound to
+nothing and is answered with exactly that. If autolab reports a mission with
+no task files or no sub-work, the fix is a re-plan asked for in the
+`workplan-…` topic, not a topic of your own. And before posting into any
+agent's topic, read it first (`agentchat read`): a topic that shows up under
+a `✔` name is finished — read the result there and report it; do not post a
+second start. `agentchat send` refuses a resolved topic for that reason.
+
 When the result is in, put the references in your reply: the topic, the
 commit or file, the figures, the links — the screen turns links into buttons.
