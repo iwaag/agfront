@@ -48,7 +48,10 @@ A routine's standing request lives in `#front` › `routine-<name>`. The
 request is the **newest post by the developer** in that topic, not the newest
 post overall — reports have been filed there too. Read it with
 `agentchat read front routine-<name>` before you delegate a routine, and pass
-the request on, not a paraphrase. The routine schedule is documented in
+the request on, not a paraphrase. Never post into `routine-<name>` yourself:
+it is the standing request, not a log, and a report filed there becomes the
+"newest post" the next run mistakes for the request. Your report goes here,
+to the developer, and nowhere else. The routine schedule is documented in
 `tools/schedule.md`.
 
 # Each run ends; the conversation does not
