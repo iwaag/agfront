@@ -58,6 +58,13 @@ topic names kept, so a line given to another character can cite the post it
 came from; a bounded or unreadable thread says so in the file. The pinned
 revision is stamped into the run record.
 
+**Since `front_desk` p2 step 3 a Front Desk reply may carry a dialogue.**
+The run ends its reply with a fenced `ag-dialogue` JSON block — a few turns
+by the characters of the pinned revision, the other agents' lines drawn from
+the threads — and `agfront.dialogue` validates and re-serializes it before
+the post, stamping the revision. An unusable block becomes an
+`ag-dialogue-error` fence after the reply, never a re-run.
+
 **Since p9 a served callback is marked.** Answering at home means Front never
 becomes the last poster in the topic that called it, so recovery would find
 that topic still naming Front and serve the exchange again on every restart.
@@ -98,6 +105,7 @@ from agag.zulip import (
     rootchat_home,
 )
 
+from .dialogue import finish_reply
 from .evidence import format_evidence, write_evidence_threads
 from .instance import SPEC
 from .settings import SettingsUnavailable, characters_markdown, pin
@@ -312,19 +320,28 @@ def serve(context) -> TopicResult:
     (front_dir / "tools" / "schedule.md").write_text(SCHEDULE_TOOL_DOC, encoding="utf-8")
 
     context.step = role
-    return TopicResult([
-        run_front(
-            front_prompt(
-                context.bot_name, threads, front_dir, role,
-                characters=(characters_placement(settings.revision if settings else None, settings_note)
-                            if desk else None),
-            ),
-            front_dir,
-            (context.channel, context.topic),
-            role,
-            extra_meta={"settings_revision": settings.revision} if settings else None,
-        )
-    ])
+    output = run_front(
+        front_prompt(
+            context.bot_name, threads, front_dir, role,
+            characters=(characters_placement(settings.revision if settings else None, settings_note)
+                        if desk else None),
+        ),
+        front_dir,
+        (context.channel, context.topic),
+        role,
+        extra_meta={"settings_revision": settings.revision} if settings else None,
+    )
+    if not desk:
+        return TopicResult([output])
+    # The Front Desk's post is the reply plus, when the run wrote one, its
+    # dialogue block — validated against the pinned revision and
+    # re-serialized here, so the screen never parses what a run improvised.
+    context.step = "dialogue"
+    text, dialogue, error = finish_reply(output, settings, workspace=front_dir, log=log)
+    if dialogue is not None:
+        log(f"dialogue: {len(dialogue.turns)} turns by {', '.join(dialogue.characters)} "
+            f"at settings {dialogue.settings_revision[:12]}")
+    return TopicResult([text])
 
 
 def handle_topic(client: ZulipClient, channel: str, topic: str) -> None:

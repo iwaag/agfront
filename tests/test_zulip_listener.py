@@ -738,3 +738,39 @@ def test_the_settings_root_is_configuration_of_this_instance(monkeypatch, tmp_pa
     assert agfront_settings.settings_root() == (agfront_settings.AGFRONT_ROOT / "elsewhere/settings").resolve()
     monkeypatch.setenv(agfront_settings.SETTINGS_ROOT_VARIABLE, str(tmp_path / "env"))
     assert agfront_settings.settings_root() == tmp_path / "env"
+
+
+# --- the Front Desk: the dialogue block in the post (front_desk p2 step 3) --
+
+
+def test_a_desk_reply_with_a_dialogue_is_posted_as_reply_plus_canonical_block(monkeypatch, tmp_path):
+    calls = []
+    scene = ('```ag-dialogue\n{"schema": "ag.frontdesk-dialogue.v1", "settings_revision": "wrong", "turns": ['
+             '{"character": "front", "text": "親方、どう？"}, '
+             '{"character": "autolab", "text": "終わった。", "sources": [{"channel": "work-g-13", "topic": "workrun-task1-g-13", "message_id": 5203}]}]}\n```')
+    wire(monkeypatch, tmp_path, calls, answer=f"できたよ🎉\n\n{scene}")
+    settings_at(monkeypatch, tmp_path)
+    zulip_listener.handle_topic(Client(calls, history=[desk_message("どうなった？")]), CHANNEL, DESK_TOPIC)
+    posted = replies(calls)[-1]
+    assert posted.startswith("@**Developer**\n\nできたよ🎉\n\n```ag-dialogue\n")
+    body = json.loads(posted.split("```ag-dialogue\n", 1)[1].rsplit("\n```", 1)[0])
+    assert body["settings_revision"] == "aaaa1111"  # the pinned one, not the run's
+    assert [t["character"] for t in body["turns"]] == ["front", "autolab"]
+    assert "wrong" not in posted
+
+
+def test_a_desk_reply_with_a_broken_block_is_posted_with_the_error_fence(monkeypatch, tmp_path):
+    calls = []
+    wire(monkeypatch, tmp_path, calls, answer="できたよ🎉\n\n```ag-dialogue\n{oops\n```")
+    settings_at(monkeypatch, tmp_path)
+    zulip_listener.handle_topic(Client(calls, history=[desk_message("どうなった？")]), CHANNEL, DESK_TOPIC)
+    posted = replies(calls)[-1]
+    assert posted.startswith("@**Developer**\n\nできたよ🎉\n\n```ag-dialogue-error\n")
+    assert (the_run(calls)[2] / "dialogue-error.txt").exists()
+
+
+def test_an_ordinary_front_reply_is_never_parsed_for_a_block(monkeypatch, tmp_path):
+    calls = []
+    wire(monkeypatch, tmp_path, calls, answer="ok\n\n```ag-dialogue\n{oops\n```")
+    zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
+    assert replies(calls)[-1].endswith("ok\n\n```ag-dialogue\n{oops\n```")

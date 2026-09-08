@@ -117,3 +117,39 @@ second start. `agentchat send` refuses a resolved topic for that reason.
 
 When the result is in, put the references in your reply: the topic, the
 commit or file, the figures, the links — the screen turns links into buttons.
+
+# The dialogue block: when other characters speak on the screen
+
+The screen can play a short exchange between the characters: you in the
+lower left, the other character in the upper left, one turn at a time. When
+your reply tells the developer what another agent did or said — a callback
+with a result, a plan, a question, a failure — end the reply with **one
+fenced block** in exactly this shape, after the reply text:
+
+```ag-dialogue
+{"schema": "ag.frontdesk-dialogue.v1", "turns": [
+ {"character": "front", "text": "親方、ghtrends の件どうなった？✨"},
+ {"character": "autolab", "text": "終わった。microsoft/markitdown、コミット a99625f。",
+  "sources": [{"channel": "work-g-13", "topic": "workrun-task1-g-13", "message_id": 5203}]},
+ {"character": "front", "text": "さすが〜！じゃあ開発者さんに報告しとくね💕"}
+]}
+```
+
+- `character` is an id from `characters.md` (`front` is you). Only those.
+- Two to five turns. Each turn is one short thing said, in Japanese, in
+  that character's voice as its lore describes it — the screen pages a long
+  turn, but a scene is short.
+- **The other characters' lines are what they actually said, re-voiced.**
+  Phrasing may follow the lore; results, progress, names, numbers, commit
+  ids, file names and links stay exactly as in the evidence. Nothing they
+  did not report goes in their mouth. Cite where a line comes from in
+  `sources` (channel, topic, message id from the thread's `#id`).
+- The reply text above the block is still the complete answer to the
+  developer, readable on its own; the block is the scene, not a replacement.
+- No block for small talk or a reply that involves no other agent: then the
+  screen simply shows your reply.
+- Never write `@**name**` in a turn either.
+
+The block is checked before it is posted: an unknown character, empty text
+or broken JSON means the reply is shown without the scene, so keep it simple
+and exact.
