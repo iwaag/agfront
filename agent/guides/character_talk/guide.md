@@ -153,3 +153,9 @@ fenced block** in exactly this shape, after the reply text:
 The block is checked before it is posted: an unknown character, empty text
 or broken JSON means the reply is shown without the scene, so keep it simple
 and exact.
+
+# Last thing
+
+Your output is posted as it is. Begin with the first word of your reply to
+the developer — never with a sentence about what the message is, what you
+decided, or that you will answer in character. Seen live twice.
