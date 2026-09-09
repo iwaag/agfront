@@ -97,8 +97,11 @@ from agag.topics import (
     write_threads,
 )
 from agag.intro import write_agents_md
+from agag.selfnote import Conversation
 from agag.zulip import (
+    LAST_SPEAKER_LOOKBACK,
     ZulipClient,
+    live_topic_name,
     log,
     note_served,
     remotes_for_home,
@@ -108,6 +111,17 @@ from agag.zulip import (
 from .dialogue import finish_reply
 from .evidence import format_evidence, write_evidence_threads
 from .instance import SPEC
+from .routine import (
+    ROUTINE_ROLE,
+    delivery_text,
+    is_run_topic,
+    opened_runs,
+    origin_of,
+    record_text,
+    recover_unstarted_runs,
+    split_finish,
+    unstarted,
+)
 from .settings import SettingsUnavailable, characters_markdown, pin
 
 
@@ -140,6 +154,7 @@ __all__ = [
     "CHARACTER_ROLE",
     "FRONT_DESK_PREFIX",
     "FRONT_ROLE",
+    "ROUTINE_ROLE",
     "SPEC",
     "ZULIP_ENV",
     "ListenerError",
@@ -148,9 +163,11 @@ __all__ = [
     "guide",
     "handle_mention",
     "handle_topic",
+    "recover_runs",
     "role_for",
     "run_front",
     "serve",
+    "start_opened_runs",
 ]
 
 
@@ -171,6 +188,8 @@ def role_for(channel: str, topic: str) -> str:
     conversation it belongs to.
     """
     del channel  # the prefix is the whole rule; `#front` is where the sweep looks
+    if is_run_topic(topic):
+        return ROUTINE_ROLE
     return CHARACTER_ROLE if topic.startswith(FRONT_DESK_PREFIX) else FRONT_ROLE
 
 
@@ -246,6 +265,10 @@ def serve(context) -> TopicResult:
     """
     role = role_for(context.channel, context.topic)
     desk = role == CHARACTER_ROLE
+    run = role == ROUTINE_ROLE
+    # A run's chatlog is its own record and its threads are its evidence:
+    # both keep their message ids, like the Front Desk's.
+    evidence = desk or run
     number = next_generation(topic_workspace(TOPICS_ROOT, context.channel, context.topic))
     front_dir = generation_dir(TOPICS_ROOT, context.channel, context.topic, number, role)
 
@@ -273,7 +296,7 @@ def serve(context) -> TopicResult:
             )
 
     context.step = "chatlog"
-    if desk:
+    if evidence:
         chatlog_path(front_dir).write_text(
             format_evidence(context.history, context.self_id, channel=context.channel,
                             topic=context.topic, drop=is_ack,
@@ -291,7 +314,7 @@ def serve(context) -> TopicResult:
         conversation.as_pair()
         for conversation in remotes_for_home(context.client, context.channel, context.topic)
     ]
-    if desk:
+    if evidence:
         threads = write_evidence_threads(context.client, front_dir, remotes, context.self_id, drop=is_ack)
     else:
         threads = write_threads(context.client, front_dir, remotes, context.self_id, drop=is_ack)
@@ -311,6 +334,8 @@ def serve(context) -> TopicResult:
         role,
         extra_meta={"settings_revision": settings.revision} if settings else None,
     )
+    if run:
+        return finish_run(context, output)
     if not desk:
         return TopicResult([output])
     # The Front Desk's post is the reply plus, when the run wrote one, its
@@ -324,10 +349,88 @@ def serve(context) -> TopicResult:
     return TopicResult([text])
 
 
+def finish_run(context, output: str) -> TopicResult:
+    """A run serving's post, and — when the run said it ends — its delivery.
+
+    The reply is the run's own record and is posted at home whatever else
+    happens. A usable `ag-routinerun` block ends the run: the report goes to
+    the conversation that opened the run (the origin the topic's root note
+    names; the run topic itself when it was opened by hand), naming the run,
+    and the run topic is resolved after the record. An unusable block is
+    recorded as such and the run stays open.
+    """
+    context.step = "finish"
+    reply, finish, error = split_finish(output)
+    if error is not None:
+        log(f"finish block unusable: {error}")
+    if finish is None:
+        return TopicResult([record_text(reply, None, error)])
+    run = Conversation(context.channel, context.topic)
+    origin = origin_of(context.history, context.self_id)
+    if origin is not None and origin != run:
+        context.step = "delivery"
+        # Directly, never through `agentchat`: a root note pointing at the
+        # run must not be written into the requester's conversation.
+        context.client.send_to_channel(
+            origin.channel,
+            live_topic_name(context.client, origin.channel, origin.topic),
+            delivery_text(finish, run),
+        )
+        log(f"delivered the run's report to {origin}")
+        record = record_text(reply, finish, None)
+    else:
+        record = "\n\n".join(s for s in (record_text(reply, finish, None), delivery_text(finish, run)) if s)
+    return TopicResult([record], resolve_after=True)
+
+
 def handle_topic(client: ZulipClient, channel: str, topic: str) -> None:
-    """Serve one awaiting front topic through the shared skeleton."""
+    """Serve one awaiting front topic through the shared skeleton.
+
+    A run topic is served without the empty-topic guard: its opening post is
+    Front's own, and a topic holding nothing but Front's speech is exactly a
+    run waiting to start, not a topic with nothing in it. Afterwards, any
+    run this conversation opened is started.
+    """
     log(f"front topic {channel!r}/{topic!r}")
-    serve_topic(client, channel, topic, serve, ack_text=ACK_TEXT, empty_reply=EMPTY_REPLY)
+    serve_topic(
+        client, channel, topic, serve, ack_text=ACK_TEXT,
+        empty_reply=None if is_run_topic(topic) else EMPTY_REPLY,
+    )
+    start_opened_runs(client, (channel, topic))
+
+
+def start_opened_runs(client: ZulipClient, home: tuple[str, str]) -> list[tuple[str, str]]:
+    """Start every run the conversation `home` opened and nobody served yet.
+
+    The owner sweep never serves a topic whose last speaker is Front, so the
+    serving that opened a run is the one that starts it — here, right after
+    its own reply went out. Serial, like everything in this listener: the
+    run's first serving happens before the next poll.
+    """
+    runs = opened_runs(client, home)
+    if not runs:
+        return []
+    self_id = int(client.whoami()["user_id"])
+    started: list[tuple[str, str]] = []
+    for run in runs:
+        history = client.topic_history(run.channel, run.topic, num_before=LAST_SPEAKER_LOOKBACK)
+        if not unstarted(history, self_id):
+            continue
+        log(f"starting run {run} opened from {home[0]!r}/{home[1]!r}")
+        handle_topic(client, run.channel, run.topic)
+        started.append(run.as_pair())
+    return started
+
+
+def recover_runs(client: ZulipClient) -> list[tuple[str, str]]:
+    """At startup: start the runs Front opened before it went down."""
+    self_id = int(client.whoami()["user_id"])
+    started: list[tuple[str, str]] = []
+    for run in recover_unstarted_runs(client, self_id):
+        log(f"recovering unstarted run {run}")
+        handle_topic(client, run.channel, run.topic)
+        started.append(run.as_pair())
+    return started
 
 
 def handle_mention(client: ZulipClient, channel: str, topic: str) -> None:
@@ -364,10 +467,13 @@ def handle_mention(client: ZulipClient, channel: str, topic: str) -> None:
     serve_topic(
         client, home.channel, home.topic, serve,
         ack_text=ACK_TEXT,
-        empty_reply=EMPTY_REPLY,
+        # A run topic holds nothing but Front's own record: that is the
+        # conversation to serve, not an empty one (found by the p1 tests).
+        empty_reply=None if is_run_topic(home.topic) else EMPTY_REPLY,
     )
     served = note_served(client, home, channel, topic)
     if served is None:
         log(f"nothing to mark served in {channel!r}/{topic!r}")
     else:
         log(f"marked {channel!r}/{topic!r} served up to {served} in {home}")
+    start_opened_runs(client, home.as_pair())

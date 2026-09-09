@@ -20,7 +20,13 @@ from agag.agent import AgentSpec
 
 AGFRONT_ROOT = Path(__file__).resolve().parents[2]
 FRONT_TOPIC_PREFIX = "front-"
+#: A routine run (`refine_routine` p1): a topic Front opens in the routine's
+#: own channel and then owns — swept wherever Front is subscribed, which is
+#: every channel of the `routine` folder.
+ROUTINE_RUN_PREFIX = "routinerun-"
 
-SPEC = AgentSpec("front", AGFRONT_ROOT, plan_prefix=FRONT_TOPIC_PREFIX)
+SPEC = AgentSpec(
+    "front", AGFRONT_ROOT, plan_prefix=FRONT_TOPIC_PREFIX, extra_prefixes=(ROUTINE_RUN_PREFIX,)
+)
 
-__all__ = ["AGFRONT_ROOT", "FRONT_TOPIC_PREFIX", "SPEC"]
+__all__ = ["AGFRONT_ROOT", "FRONT_TOPIC_PREFIX", "ROUTINE_RUN_PREFIX", "SPEC"]

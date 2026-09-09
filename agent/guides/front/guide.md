@@ -11,11 +11,20 @@ If the developer accepted your plan, or plan is already going on, keep taking wi
 A routine is a process guide kept in Zulip. The channel folder `routine`
 holds one channel per routine (`agentchat channels --prefix routine-` lists
 them), and the **newest post in that channel's `guide` topic is the whole
-guide** — read it with `agentchat read routine-<name> guide` before you act
-on a routine, and pass its content on rather than a paraphrase. Never post
-into `guide`: it is the guide, not a log. There is no schedule any more: a
-routine runs when somebody asks you to run it, and a timed or recurring run
-is not something you can arrange — say so if asked.
+guide** — `agentchat read routine-<name> guide`. Never post into `guide`.
+
+Asked to run a routine, read its guide, then **open the run**: one
+`agentchat send` into that routine's channel, topic `routinerun-<id>` (a
+name that does not exist there yet — `agentchat topics routine-<name>`
+shows the existing ones; the UTC time is a good id), carrying the opening
+post: the request in the developer's own words, the execution and end
+conditions as you understood them, the guide post you read (its message
+id), and this conversation as where the request came from. That one post
+is the start: the run is served after this reply, as its own conversation,
+and you must not post into it again. Tell the developer where you opened
+it. When the run ends, its report is posted here, into this conversation.
+There is no schedule: a timed or recurring run is not something you can
+arrange — say so if asked.
 
 Judge only after evidence exists. Read run topics with `agentchat read --since`
 or `agentchat wait` so a resolved `✔ ` rename is followed. Ask autolab in its

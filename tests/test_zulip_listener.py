@@ -543,13 +543,17 @@ def test_the_listener_is_the_skeleton_with_one_route_and_the_mention_route(monke
         listener, "listener_main",
         lambda spec, routes, **kw: handed.update(spec=spec, routes=routes, **kw),
     )
+    monkeypatch.setattr(listener, "recover_runs", lambda client: handed.update(recovered=True))
     listener.main()
     assert handed["spec"] is zulip_listener.SPEC
-    assert handed["routes"] == {"front-": zulip_listener.handle_topic}
+    assert handed["routes"] == {"front-": zulip_listener.handle_topic,
+                                "routinerun-": zulip_listener.handle_topic}
     assert handed["on_mention"] is zulip_listener.handle_mention
-    # `front-` is the only prefix swept: Front never answers the topics it
-    # opens elsewhere, by filter and not by luck.
-    assert zulip_listener.SPEC.sweep_prefixes == ("front-",)
+    assert handed["recovered"] is True
+    # `front-` and its own `routinerun-` are the only prefixes swept: Front
+    # never answers the topics it opens in other agents' channels, by filter
+    # and not by luck.
+    assert zulip_listener.SPEC.sweep_prefixes == ("front-", "routinerun-")
 
 
 # --- the Front Desk: characters and evidence (front_desk p2 step 2) ---------

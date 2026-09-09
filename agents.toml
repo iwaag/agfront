@@ -86,3 +86,17 @@ model = "anthropic/claude-sonnet-5"
 profile = "character_talk"
 requires = []
 allowed_tools = "Read,Glob,Grep,Bash(agentchat:*)"
+
+# A routine run (refine_routine p1). The same tools as `front`; the guide the
+# listener pairs with it (`agent/guides/routine_run/guide.md`) is what makes
+# it drive a `routinerun-` topic: read the guide and the record, delegate,
+# judge the answers, record, and say when the run ends. Its own profile, so
+# runs can be moved to another model without touching the entrance.
+[profiles.routine_run]
+harness = "claude_code"
+model = "anthropic/claude-sonnet-5"
+
+[roles.routine_run]
+profile = "routine_run"
+requires = []
+allowed_tools = "Read,Glob,Grep,Bash(agentchat:*)"
