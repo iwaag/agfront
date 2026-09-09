@@ -18,16 +18,16 @@ from agfront import zulip_listener
 from agfront.instance import SPEC
 
 
-def test_front_s_grant_is_reading_plus_agentchat_and_schedule():
+def test_front_s_grant_is_reading_plus_agentchat():
     """Front routes; the work happens elsewhere. Since p2 it does the asking
-    itself, so its grant is the reading tools, the one command that reaches
-    another agent, and the schedule-only CLI — with no general shell or file
-    writer."""
+    itself, so its grant is the reading tools and the one command that reaches
+    another agent — with no general shell or file writer. The schedule-only
+    CLI it once carried is gone with the schedule (`refine_routine` p1)."""
     config, overlay = load_config(SPEC.agents_config, Path("/nonexistent"))
     grant = resolve_role(config, overlay, "front", check_available=False).allowed_tools
     assert "Bash(agentchat:*)" in grant
-    assert "Bash(rtschedule:*)" in grant
-    remaining = grant.replace("Bash(agentchat:*)", "").replace("Bash(rtschedule:*)", "")
+    assert "rtschedule" not in grant
+    remaining = grant.replace("Bash(agentchat:*)", "")
     assert "Bash(" not in remaining
     assert "Write" not in grant
 

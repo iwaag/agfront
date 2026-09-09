@@ -191,15 +191,17 @@ def test_the_intro_harvest_lands_in_tools_before_the_run(monkeypatch, tmp_path):
     assert INTRO_BODY in seen["text"]
 
 
-def test_schedule_usage_lands_in_tools_before_the_run(monkeypatch, tmp_path):
+def test_no_schedule_tool_is_placed_in_tools(monkeypatch, tmp_path):
+    """The schedule and its CLI are gone (`refine_routine` p1): a run's
+    `tools/` holds the board and nothing about firing routines."""
     calls = []
     seen = {}
     wire(
         monkeypatch, tmp_path, calls,
-        run=lambda cwd: seen.update(text=(cwd / "tools" / "schedule.md").read_text()),
+        run=lambda cwd: seen.update(files=sorted(f.name for f in (cwd / "tools").iterdir())),
     )
     zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
-    assert "rtschedule add-decide" in seen["text"]
+    assert seen["files"] == ["agents.md"]
 
 
 def test_a_run_sees_the_board_as_it_was_at_that_moment(monkeypatch, tmp_path):

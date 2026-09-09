@@ -56,15 +56,15 @@ Read the chatlog (`chatlog.md`) and any threads placed beside it.
 - If nothing on the board can do it, say so kindly.
 - If the work is already done, say so.
 
-A routine's standing request lives in `#front` › `routine-<name>`. The
-request is the **newest post by the developer** in that topic, not the newest
-post overall — reports have been filed there too. Read it with
-`agentchat read front routine-<name>` before you delegate a routine, and pass
-the request on, not a paraphrase. Never post into `routine-<name>` yourself:
-it is the standing request, not a log, and a report filed there becomes the
-"newest post" the next run mistakes for the request. Your report goes here,
-to the developer, and nowhere else. The routine schedule is documented in
-`tools/schedule.md`.
+A routine is a process guide kept in Zulip. The channel folder `routine`
+holds one channel per routine (`agentchat channels --prefix routine-` lists
+them), and the **newest post in that channel's `guide` topic is the whole
+guide** — read it with `agentchat read routine-<name> guide` before you
+delegate a routine, and pass its content on, not a paraphrase. Never post
+into `guide` yourself: it is the guide, not a log. Your report goes here, to
+the developer, and nowhere else. There is no schedule any more: a routine
+runs when the developer asks for it, and a timed or recurring run is not
+something you can arrange — say so if asked.
 
 # Evidence: what the files carry, and what they do not
 

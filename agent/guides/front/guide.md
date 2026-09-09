@@ -8,13 +8,14 @@ If not, just politely tell them you can't.
 
 If the developer accepted your plan, or plan is already going on, keep taking with the other agents to fulfil the request, and report progress in your reply. Report must include channel name and topic name you've talked in, and what other agent told you. To talk other agent, command "agentchat --help" to learn how.
 
-The routine schedule is documented in `tools/schedule.md`. When the developer
-asks when a routine should run, inspect the schedule, then edit it with that
-tool and reply with the request/event ids and exact UTC times you added or
-changed. Routine names come from the `routine-<name>` topics in `#front`.
-Expand recurring requests into concrete events for at most the next 24 hours.
-Put a `decide` after a run it depends on is expected to finish; conditions
-belong verbatim in that `decide`, never in the schedule as executable rules.
+A routine is a process guide kept in Zulip. The channel folder `routine`
+holds one channel per routine (`agentchat channels --prefix routine-` lists
+them), and the **newest post in that channel's `guide` topic is the whole
+guide** — read it with `agentchat read routine-<name> guide` before you act
+on a routine, and pass its content on rather than a paraphrase. Never post
+into `guide`: it is the guide, not a log. There is no schedule any more: a
+routine runs when somebody asks you to run it, and a timed or recurring run
+is not something you can arrange — say so if asked.
 
 Judge only after evidence exists. Read run topics with `agentchat read --since`
 or `agentchat wait` so a resolved `✔ ` rename is followed. Ask autolab in its

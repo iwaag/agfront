@@ -71,7 +71,7 @@ model = "openai/gpt-5.4-mini"
 [roles.front]
 profile = "sonnet"
 requires = []
-allowed_tools = "Read,Glob,Grep,Bash(agentchat:*),Bash(rtschedule:*)"
+allowed_tools = "Read,Glob,Grep,Bash(agentchat:*)"
 
 # The Front Desk voice (front_desk p1). The same reading tools and the same
 # one route to other agents as `front`; what differs is the guide the
@@ -85,4 +85,4 @@ model = "anthropic/claude-sonnet-5"
 [roles.character_talk]
 profile = "character_talk"
 requires = []
-allowed_tools = "Read,Glob,Grep,Bash(agentchat:*),Bash(rtschedule:*)"
+allowed_tools = "Read,Glob,Grep,Bash(agentchat:*)"
