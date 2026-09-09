@@ -352,3 +352,34 @@ def test_the_requester_guides_say_how_to_open_a_run():
         assert "routinerun-" in text and "agentchat topics routine-" in text
         assert "guide" in text and "schedule" in text  # says there is none
         assert "rtschedule" not in text
+
+
+# --- a run honours the execution preference it was opened with (step4) -----
+
+from agag.execopt import Selection  # noqa: E402
+
+
+def exec_command(option, bot="Front"):
+    return f"@**{bot}** use {option}"
+
+
+def test_a_run_topic_carries_its_own_execution_selection(monkeypatch, tmp_path):
+    """The run is a conversation of Front's own, so a command in it selects
+    how Front drives the run — separately from what Front asks of the agents
+    it delegates to, which is settled in *their* topics."""
+    calls = []
+    wire_runs(monkeypatch, tmp_path, calls)
+    history = [
+        origin_note(),
+        opening(),
+        post(RUN_CHANNEL, RUN_TOPIC, exec_command("agy"), id=12,
+             sender_id=HUMAN_ID, name="Developer"),
+        entry(id=13),
+        post(RUN_CHANNEL, RUN_TOPIC, "carry on", id=14,
+             sender_id=HUMAN_ID, name="Developer"),
+    ]
+    client = RunBoard(calls, {(RUN_CHANNEL, RUN_TOPIC): history})
+    zulip_listener.handle_topic(client, RUN_CHANNEL, RUN_TOPIC)
+    call = runs(calls)[0]
+    assert call[4] == zulip_listener.ROUTINE_ROLE
+    assert call[6].option == "agy"

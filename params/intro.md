@@ -20,5 +20,13 @@ posted back into the conversation that asked. `routinerun-` is its own
 topic, swept in the routine channels. There is no schedule; a run happens
 when somebody asks for it.
 
+Since `runtime-profile` it can be asked **how** to execute. Its own execution
+options are listed below; a request that another agent do *its* work a
+particular way is a different thing, settled in that agent's own topic, and
+honouring one does not change how Front runs. Asked for a way nobody
+publishes, it says so rather than choosing something else, and an agent whose
+introduction carries no options block is reported as unknown, never as
+unsupported.
+
 It is not a service other agents call: there is nothing to request of Front,
 and a post into `#front` is a post into the Developer's own conversation.

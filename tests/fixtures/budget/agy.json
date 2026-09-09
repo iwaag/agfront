@@ -1,0 +1,38 @@
+{
+ "schema": "ag.budget.v1",
+ "generated_at": 1788965970.0,
+ "harnesses": {
+  "agy": {
+   "harness": "agy",
+   "source": "antigravity account usage",
+   "read_at": 1788965970.0,
+   "plan": "pro",
+   "ok": true,
+   "error": null,
+   "windows": [
+    {
+     "kind": "5h",
+     "label": "5-hour session",
+     "percent": 71.0,
+     "resets_at": 1788980400.0
+    }
+   ]
+  },
+  "gemini_cli": {
+   "harness": "gemini_cli",
+   "source": "gemini cli store",
+   "read_at": 1788965970.0,
+   "ok": false,
+   "error": "credential store is locked",
+   "stale": null,
+   "windows": []
+  },
+  "agcode": {
+   "harness": "agcode",
+   "read_at": 1788965970.0,
+   "ok": true,
+   "error": null,
+   "windows": [{"kind": "5h", "label": "5-hour session", "percent": 3.0, "resets_at": 1788980400.0}]
+  }
+ }
+}

@@ -19,7 +19,11 @@ yourself and for whoever reads the run afterwards.
   when you are unsure what the routine asks for.
 - `tools/budget.md` — how much of each harness's plan window is used, as
   read when this serving began, with the explanation of how to read it.
-  `agbudget` reads it again, fresh, whenever you want.
+  Each section names the **pool** it is, which is how a window is matched to
+  an execution option. `agbudget` reads it again, fresh, whenever you want.
+- `agentchat options` — what each agent publishes about how it can be asked
+  to execute: public option names, the pool each consumes, the work each
+  covers. Read it when the run has an execution preference to honour.
 
 # What to do in one serving
 
@@ -34,13 +38,26 @@ yourself and for whoever reads the run afterwards.
    wait, or end the run. The guide says what the routine does; the opening
    post says what this run is for and when it ends. Where they disagree,
    the opening post wins for this run.
-4. Act with `agentchat send`, in ordinary professional language, into the
+4. If the opening post records an execution preference, honour it at **every**
+   delegation, not just the first: read that agent's published options
+   (`agentchat options <agent>`), pick the one that matches the intent, and
+   select it in the topic before you post the request —
+   `agentchat use <channel> <topic> <option> --to "<their Zulip name>"`,
+   which is configuration only and starts nothing. Option names belong to the
+   agent that published them, so translate the intent for each recipient
+   rather than forwarding a name. An agent that publishes nothing is
+   **unknown**: say so in your entry and ask the developer through the report
+   rather than guessing, and never run work a way that was not asked for. If
+   the option is published but unavailable when it runs, the failure comes
+   back as a failed serving in that agent's topic — record it and say so; do
+   not silently retry on something else.
+5. Act with `agentchat send`, in ordinary professional language, into the
    entrance the agent's introduction names. Read a topic before posting
    into it. Open a **new** topic for each delegation; never post a second
    start into one that is running or resolved. Posting into an agent's topic
    is what makes that agent run, so only post when you have something for
    them.
-5. Write your entry (the reply): what you asked and where (channel, topic),
+6. Write your entry (the reply): what you asked and where (channel, topic),
    what came back (with message ids), what you are waiting for, and what
    you decided and why. Then finish the serving. You will run again when an
    agent you wrote to answers and names you.
@@ -54,6 +71,18 @@ A request often bounds the run by a plan window: "until the 5-hour window
 is 50 % used", "stop at 80 % of the weekly window". Read the opening post
 for how the condition was understood when the run was opened, and judge it
 against `tools/budget.md` or a fresh `agbudget`:
+
+First **name the window you are judging**. A request that says "until agy's
+usage exceeds 70 %" is about the pool the `agy` option consumes, so match it
+to the section of `tools/budget.md` marked with that pool, and say in your
+entry which section and which window you read. A section whose pool is
+`unknown`, or a pool with no section at all, cannot be matched: that is an
+unobservable condition, not a condition at 0. "Exceeds N" is strictly past N;
+"until N % used" is reaching N. Keep whichever the opening post recorded.
+
+The condition is about the **shared account window**, not this run's own
+cost: everything else on the same account moves the same meter, and the run
+records (`cost_usd`) are a different number entirely.
 
 - "until the window is N % used" means **the current window's `percent
   used` has reached N**, whatever consumed it — other work on the same

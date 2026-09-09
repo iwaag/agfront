@@ -103,8 +103,8 @@ def wire(monkeypatch, tmp_path, calls, *, answer="on it", run=None):
         ),
     )
 
-    def front_run(prompt, cwd, home, role="front", *, extra_meta=None):
-        calls.append(("front", prompt, cwd, home, role, extra_meta))
+    def front_run(prompt, cwd, home, role="front", *, extra_meta=None, selection=None):
+        calls.append(("front", prompt, cwd, home, role, extra_meta, selection))
         if run is not None:
             run(cwd)
         return answer
@@ -138,8 +138,14 @@ def test_the_run_s_answer_is_the_reply_and_nothing_is_posted_elsewhere(monkeypat
 
     zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
 
+    # The second `whoami` is Front's execution menu, addressed by the name a
+    # mention matches (`ag.exec-options.v1`); a real client answers it from
+    # cache. The topic is read **before** the ack — a configuration-only post
+    # must buy neither an ack nor a run — and that same read is the serving's
+    # chatlog, so the contract costs no extra Zulip call. The last history
+    # read is the post-run re-check.
     assert [call[0] for call in calls] == [
-        "whoami", "reply", "history", "front",
+        "whoami", "whoami", "history", "reply", "front",
         # the handoff lookup, the reply, then the post-run re-check
         "history", "reply", "history",
     ]
@@ -780,3 +786,98 @@ def test_an_ordinary_front_reply_is_never_parsed_for_a_block(monkeypatch, tmp_pa
     wire(monkeypatch, tmp_path, calls, answer="ok\n\n```ag-dialogue\n{oops\n```")
     zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
     assert replies(calls)[-1].endswith("ok\n\n```ag-dialogue\n{oops\n```")
+
+
+# --- execution options (ag.exec-options.v1, runtime-profile step4) ---------
+
+from agag import execopt  # noqa: E402
+from agag.execopt import Option, Selection  # noqa: E402
+
+from agfront import instance as front_instance  # noqa: E402
+
+
+def exec_command(option, bot="Front"):
+    return f"@**{bot}** use {option}"
+
+
+def test_front_publishes_only_profiles_it_actually_has(tmp_path):
+    config = tmp_path / "agents.toml"
+    config.write_text(
+        'schema = "ag.agent-config.v2"\n'
+        '[models."antigravity/g"]\n'
+        '[profiles.agy]\nharness = "agy"\nmodel = "antigravity/g"\n',
+        encoding="utf-8",
+    )
+    assert [option.name for option in front_instance.exec_options(config)] == ["default", "agy"]
+
+
+def test_fronts_options_are_about_fronts_own_conversations():
+    # Asking Front to run on agy and asking Front to have autolab run on agy
+    # are different requests; the menu says which one this is.
+    for option in front_instance.SPEC.exec_options:
+        assert "my own conversations" in option.covers
+
+
+def test_a_selection_reaches_fronts_own_run(monkeypatch, tmp_path):
+    calls = []
+    wire(monkeypatch, tmp_path, calls)
+    zulip_listener.handle_topic(
+        Client(calls, history=[message(content=exec_command("agy"), id=5),
+                               message(content=REQUEST, id=6)]),
+        CHANNEL, TOPIC,
+    )
+    selection = next(call for call in calls if call[0] == "front")[6]
+    assert selection.option == "agy" and selection.message_id == 5
+
+
+def test_a_configuration_only_post_in_a_front_topic_starts_no_run(monkeypatch, tmp_path):
+    calls = []
+    wire(monkeypatch, tmp_path, calls)
+    zulip_listener.handle_topic(
+        Client(calls, history=[message(sender_id=BOT_ID, name="Front", content="answered", id=4),
+                               message(content=exec_command("agy"), id=5)]),
+        CHANNEL, TOPIC,
+    )
+    assert not [call for call in calls if call[0] == "front"]
+    assert "Execution option set to `agy`" in replies(calls)[-1]
+
+
+def test_an_unpublished_option_is_refused_and_names_the_menu(monkeypatch, tmp_path):
+    calls = []
+    wire(monkeypatch, tmp_path, calls)
+    zulip_listener.handle_topic(
+        Client(calls, history=[message(sender_id=BOT_ID, name="Front", content="answered", id=4),
+                               message(content=exec_command("opus"), id=5)]),
+        CHANNEL, TOPIC,
+    )
+    assert not [call for call in calls if call[0] == "front"]
+    refusal = replies(calls)[-1]
+    assert refusal.startswith("@**Developer**")
+    assert "`opus`" in refusal and "`agy`" in refusal
+
+
+def test_a_callback_answers_home_under_homes_selection(monkeypatch, tmp_path):
+    """A callback's remote topic is not Front's execution context."""
+    calls = []
+    wire(monkeypatch, tmp_path, calls)
+    remote = ("agforge-agstudio1", "assetplan-x")
+
+    class Callback(Client):
+        def topic_history(self, channel, topic, num_before):
+            if (channel, topic) == remote:
+                self.calls.append(("history", channel, topic, num_before))
+                return [
+                    message(sender_id=BOT_ID, name="Front",
+                            content=rootchat_note(Conversation(CHANNEL, TOPIC))),
+                    message(sender_id=13, name="Forge",
+                            content=exec_command("codex", bot="Forge"), id=70),
+                    message(sender_id=13, name="Forge",
+                            content="@**Front** here it is", id=71),
+                ]
+            return super().topic_history(channel, topic, num_before)
+
+    client = Callback(calls, history=[message(content=exec_command("agy"), id=5),
+                                      message(content=REQUEST, id=6)])
+    zulip_listener.handle_mention(client, *remote)
+    assert next(call for call in calls if call[0] == "front")[6].option == "agy"
+

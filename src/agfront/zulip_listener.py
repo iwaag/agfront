@@ -78,7 +78,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from agag.agent import SWEEP_ACK as ACK_TEXT, is_ack, run_role
+from agag.agent import SWEEP_ACK as ACK_TEXT, exec_options_for, is_ack, run_role
 from agag.entrance import EMPTY_REPLY
 from agag.topics import (
     HISTORY_MESSAGES,
@@ -96,6 +96,7 @@ from agag.topics import (
     topic_workspace,
     write_threads,
 )
+from agag.execopt import Selection
 from agag.intro import write_agents_md
 from agag.selfnote import Conversation
 from agag.zulip import (
@@ -229,7 +230,7 @@ def front_prompt(
 
 def run_front(
     prompt: str, cwd: Path, home: tuple[str, str], role: str = FRONT_ROLE,
-    *, extra_meta: dict | None = None,
+    *, extra_meta: dict | None = None, selection: Selection | None = None,
 ) -> str:
     """One run of `role` in the topic workspace, with its `ag.agent-run.v1` record.
 
@@ -249,6 +250,7 @@ def run_front(
         record=record,
         home=home,
         extra_meta=extra_meta or None,
+        selection=selection,
     )
     if exit_code != 0:
         raise ListenerError(f"{role} run exited {exit_code}: {output.strip()[:500]}")
@@ -340,6 +342,10 @@ def serve(context) -> TopicResult:
         (context.channel, context.topic),
         role,
         extra_meta={"settings_revision": settings.revision} if settings else None,
+        # Front's own execution option, frozen for this serving. Asking
+        # another agent to run *its* work a certain way is a different
+        # decision, made in that agent's own topic (`agentchat use`).
+        selection=context.selection,
     )
     if run:
         return finish_run(context, output)
@@ -402,6 +408,7 @@ def handle_topic(client: ZulipClient, channel: str, topic: str) -> None:
     serve_topic(
         client, channel, topic, serve, ack_text=ACK_TEXT,
         empty_reply=None if is_run_topic(topic) else EMPTY_REPLY,
+        exec_options=exec_options_for(SPEC, client),
     )
     start_opened_runs(client, (channel, topic))
 
@@ -477,6 +484,10 @@ def handle_mention(client: ZulipClient, channel: str, topic: str) -> None:
         # A run topic holds nothing but Front's own record: that is the
         # conversation to serve, not an empty one (found by the p1 tests).
         empty_reply=None if is_run_topic(home.topic) else EMPTY_REPLY,
+        # The selection is read from home, never from the topic that called
+        # Front back: a callback's remote topic is somebody else's
+        # conversation and may carry a command addressed to somebody else.
+        exec_options=exec_options_for(SPEC, client),
     )
     served = note_served(client, home, channel, topic)
     if served is None:

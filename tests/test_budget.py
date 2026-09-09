@@ -73,7 +73,7 @@ def test_a_source_that_cannot_be_read_is_rendered_as_that(tmp_path):
 def test_the_cli_reads_a_file_and_prints_the_observation(capsys):
     assert budget.main(["--source", str(FIXTURES / "below.json")]) == 0
     out = capsys.readouterr().out
-    assert out.startswith("# Budget observation") and "31 % used" in out and "## codex (plan plus)" in out
+    assert out.startswith("# Budget observation") and "31 % used" in out and "## codex (plan plus, pool openai)" in out
 
 
 def test_the_cli_json_is_the_raw_document(capsys):
@@ -139,3 +139,39 @@ def test_the_run_guide_reads_the_conditions_the_way_the_plan_says():
     assert "consume N points from the start" in text
     assert "failed or stale read" in text.lower()
     assert "achieved" in text and "reason" in text
+
+
+# --- matching a threshold to the pool an option consumes (step4) ----------
+
+
+def test_a_harness_says_which_account_it_spends():
+    assert budget.pool_for("agy") == "antigravity"
+    assert budget.pool_for("claude_code") == "anthropic"
+    assert budget.pool_for("codex") == "openai"
+    assert budget.pool_for("gemini_cli") == "google"
+
+
+def test_a_harness_whose_account_follows_its_model_says_unknown():
+    # agcode's provider comes from the model it is pointed at, so there is no
+    # pool to state — and a threshold matched to the wrong window is worse
+    # than one that says it cannot be judged.
+    assert budget.pool_for("agcode") is None
+
+
+def test_the_observation_names_each_sections_pool():
+    text = budget.observe(str(FIXTURES / "agy.json"), now=NOW)
+    assert "## agy (plan pro, pool antigravity)" in text
+    assert "## agcode (pool unknown)" in text
+
+
+def test_an_already_reached_threshold_is_readable_off_the_matched_pool():
+    text = budget.observe(str(FIXTURES / "agy.json"), now=NOW)
+    section = text.split("## agy")[1].split("## ")[0]
+    assert "71 % used" in section
+
+
+def test_a_failed_read_of_the_matched_pool_is_unknown_not_zero():
+    text = budget.observe(str(FIXTURES / "agy.json"), now=NOW)
+    section = text.split("## gemini_cli")[1].split("## ")[0]
+    assert "READ FAILED" in section and "usage unknown" in section
+    assert "0 %" not in section

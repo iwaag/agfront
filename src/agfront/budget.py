@@ -21,6 +21,16 @@ for a failed read — the failure and the last good numbers marked as stale.
 so is this module's whole job, and deciding what to do about it is the
 run's.
 
+Since `runtime-profile` step4 each section also names the **usage pool** it
+is: an execution option (`ag.exec-options.v1`) advertises the pool it
+consumes, the budget document is keyed by *harness*, and a threshold like
+"until agy's usage exceeds 70 %" is only answerable when the two can be put
+side by side. The pool is the provider whose account the harness spends —
+`agag.agent_config.HARNESS_PROVIDER`, the same table the configuration
+validates profiles against — so the correspondence is derived, not invented
+here. A harness with no entry (agcode, whose account depends on its model)
+says its pool is unknown rather than guessing one.
+
 `AGFRONT_BUDGET_URL` names the source: an `http(s)://` URL (default: the
 relay on loopback) or a filesystem path to a JSON document of the same
 shape, which is how a controlled observation is placed in front of a run.
@@ -34,6 +44,8 @@ import os
 import sys
 import time
 from pathlib import Path
+
+from agag.agent_config import HARNESS_PROVIDER
 
 SOURCE_VARIABLE = "AGFRONT_BUDGET_URL"
 DEFAULT_SOURCE = "http://127.0.0.1:8094/budget"
@@ -58,6 +70,11 @@ How to read a window:
 - `resets` says when the current window ends. When that time has already
   passed since the read, the number shown is from a window that is over:
   the current usage is unknown until it is read again.
+- `pool` is the account this harness spends, and it is how a window is
+  matched to an execution option: an option that says `pool: antigravity`
+  is judged against the section marked `pool antigravity`. Two harnesses can
+  share a pool; a section whose pool is `unknown` cannot be matched to an
+  option at all, and saying so is the answer.
 - `READ FAILED` means the vendor could not be asked; the numbers under
   *last good* are what was read earlier and are **stale** — they say what
   was true then, not now. A failed or stale read never counts as a
@@ -109,6 +126,19 @@ def read_budget(source: str, *, timeout: float = READ_TIMEOUT_SECONDS) -> dict:
 
 
 # --- rendering -----------------------------------------------------------------
+
+
+def pool_for(harness: str) -> str | None:
+    """The account a harness spends, or None when it cannot be said.
+
+    `agag.agent_config.HARNESS_PROVIDER` is the authority: a harness bound to
+    one provider spends that provider's account, and that provider name is
+    what an execution option publishes as its `pool`. `agcode` is absent on
+    purpose — its account follows its model — and None is written as
+    `unknown`, never guessed, because a threshold matched to the wrong window
+    is worse than a threshold that says it cannot be judged.
+    """
+    return HARNESS_PROVIDER.get(harness)
 
 
 def _utc(epoch) -> str:
@@ -166,7 +196,12 @@ def render(document: dict, *, now: float | None = None, source: str | None = Non
     for name in sorted(harnesses):
         card = harnesses[name] or {}
         plan = card.get("plan")
-        head = f"## {name}" + (f" (plan {plan})" if plan else "")
+        pool = pool_for(name)
+        marks = ", ".join(
+            part for part in (f"plan {plan}" if plan else "",
+                              f"pool {pool}" if pool else "pool unknown") if part
+        )
+        head = f"## {name}" + (f" ({marks})" if marks else "")
         read_at = card.get("read_at")
         if card.get("ok") is False:
             lines.append(f"\n{head} — READ FAILED")
