@@ -108,6 +108,7 @@ from agag.zulip import (
     rootchat_home,
 )
 
+from .budget import write_budget_doc
 from .dialogue import finish_reply
 from .evidence import format_evidence, write_evidence_threads
 from .instance import SPEC
@@ -321,6 +322,12 @@ def serve(context) -> TopicResult:
 
     context.step = "harvest"
     write_agents_md(context.client, front_dir)
+    if run:
+        # The observation a run judges its conditions against, at the start
+        # of this serving; `agbudget` re-reads it. A failed read is written
+        # as a failed read (`agfront.budget`), never skipped.
+        context.step = "budget"
+        write_budget_doc(front_dir)
 
     context.step = role
     output = run_front(

@@ -95,11 +95,15 @@ class RunBoard(Board):
         return found
 
 
-def wire_runs(monkeypatch, tmp_path, calls, **kw):
+def wire_runs(monkeypatch, tmp_path, calls, *, budget_source=None, **kw):
+    """`wire`, plus the run guide and a budget observation that never
+    touches the relay: a fixture file, or a path that does not exist (a
+    failed read, rendered as one)."""
     wire(monkeypatch, tmp_path, calls, **kw)
     guides = tmp_path / "guides"
     (guides / "routine_run").mkdir(parents=True, exist_ok=True)
     (guides / "routine_run" / "guide.md").write_text("RUN GUIDE")
+    monkeypatch.setenv("AGFRONT_BUDGET_URL", budget_source or str(tmp_path / "no-budget.json"))
 
 
 def runs(calls):

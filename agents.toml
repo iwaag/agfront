@@ -99,4 +99,6 @@ model = "anthropic/claude-sonnet-5"
 [roles.routine_run]
 profile = "routine_run"
 requires = []
-allowed_tools = "Read,Glob,Grep,Bash(agentchat:*)"
+# `agbudget` is the observation a run judges its conditions against
+# (`agfront.budget`): a read of the plan windows, never a write.
+allowed_tools = "Read,Glob,Grep,Bash(agentchat:*),Bash(agbudget:*)"

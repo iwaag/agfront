@@ -1,0 +1,51 @@
+{
+ "schema": "ag.budget.v1",
+ "generated_at": 1788965970.0,
+ "harnesses": {
+  "claude_code": {
+   "harness": "claude_code",
+   "source": "api.anthropic.com/api/oauth/usage",
+   "read_at": 1788965970.0,
+   "plan": "max",
+   "tier": "default_claude_max_5x",
+   "store": "keychain",
+   "windows": [
+    {
+     "kind": "session",
+     "label": "5-hour session",
+     "percent": 57.0,
+     "resets_at": 1788973200.0,
+     "severity": "normal",
+     "scope": null
+    },
+    {
+     "kind": "weekly_all",
+     "label": "weekly, all models",
+     "percent": 44.0,
+     "resets_at": 1789225200.0,
+     "severity": "normal",
+     "scope": null
+    }
+   ],
+   "ok": true,
+   "error": null
+  },
+  "codex": {
+   "harness": "codex",
+   "source": "codex app-server account/rateLimits/read",
+   "read_at": 1788965970.0,
+   "plan": "plus",
+   "ok": true,
+   "error": null,
+   "windows": [
+    {
+     "kind": "5h",
+     "label": "5-hour session",
+     "percent": 16.0,
+     "resets_at": 1788980400.0,
+     "window_minutes": 300
+    }
+   ]
+  }
+ }
+}

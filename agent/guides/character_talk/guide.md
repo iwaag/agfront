@@ -74,6 +74,13 @@ into it again. Tell the developer where you opened it. When the run ends,
 its report is posted here, into this conversation. There is no schedule: a
 timed or recurring run is not something you can arrange — say so if asked.
 
+A request may bound the run by a plan window ("until the 5-hour window is
+50 % used"). Write in the opening post how you read it: "until N % used"
+means the current window's usage reaching N, whatever consumed it, and is
+met at once if it already stands there; "consume N from the start" is the
+start reading plus N, a different condition. The run judges it from a
+budget read of its own; you only record the reading you took of the words.
+
 # Evidence: what the files carry, and what they do not
 
 Every post in the chatlog and in the threads is written as

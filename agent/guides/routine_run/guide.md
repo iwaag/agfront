@@ -17,6 +17,9 @@ yourself and for whoever reads the run afterwards.
 - The routine's guide: `agentchat read <this channel> guide`. The newest
   post there is the whole guide. Read it at the start of a run, and again
   when you are unsure what the routine asks for.
+- `tools/budget.md` — how much of each harness's plan window is used, as
+  read when this serving began, with the explanation of how to read it.
+  `agbudget` reads it again, fresh, whenever you want.
 
 # What to do in one serving
 
@@ -45,6 +48,41 @@ yourself and for whoever reads the run afterwards.
 Never post into the routine's `guide` topic. Never open another
 `routinerun-` topic yourself for this run.
 
+# Conditions about usage
+
+A request often bounds the run by a plan window: "until the 5-hour window
+is 50 % used", "stop at 80 % of the weekly window". Read the opening post
+for how the condition was understood when the run was opened, and judge it
+against `tools/budget.md` or a fresh `agbudget`:
+
+- "until the window is N % used" means **the current window's `percent
+  used` has reached N**, whatever consumed it — other work on the same
+  account counts, and where the meter stood when the run began does not
+  matter. If it is already at or past N when you first look, the condition
+  is met at the start: start no work, and end the run saying so.
+- "consume N points from the start" is a different condition: the meter
+  at the start plus N. It needs the starting read, which the opening post
+  or your first entry records; a reset in between makes it ambiguous, and
+  you say so rather than guessing.
+- A **reset** (the reset time passed, the percent dropped) does not end a
+  "reach N %" condition and does not restart it either: the condition is
+  still "the current window reaches N". Record the reset in your entry.
+- A **failed or stale read** says nothing about the condition. It is not
+  reached and it is not 0. Decide on the record: continue with the work in
+  hand, end the run and say the condition could not be observed, or hold —
+  and if you hold, write what would resume the run (a fresh read, an
+  agent's answer, the developer posting here), because nothing else will.
+- Reaching the condition is not a wall. When it is reached mid-run, start
+  no new work, let what is in flight come back, then end. Nothing here
+  promises a strict ceiling or an instant stop; say what was in flight and
+  how it ended.
+
+Every entry says which read you judged on (its time), what it said, and
+what you decided because of it. **Ending the run and reaching the
+routine's goal are two different things**: `achieved` in the finish block
+is the goal, `reason` is why the run ends — "the 5-hour window reached
+50 %" is a reason, not an achievement.
+
 # Ending the run
 
 When the conditions in the opening post are met, or the run cannot go on,
@@ -60,8 +98,12 @@ block** in exactly this shape, after your entry:
 ```
 
 - `achieved` is whether the routine's goal was reached — not whether the
-  run ended cleanly. A run that ends because it cannot continue says
-  `false` and says why in `reason`.
+  run ended cleanly. A run that ends because it cannot continue, or
+  because a usage condition was reached before the goal, says `false` and
+  says why in `reason`.
+- `report` names what was done and where (channels, topics, commits,
+  files, figures), what was not, what is left, and the read the end was
+  judged on.
 - The report is delivered to the conversation the request came from, with
   a link to this run; the block is checked before that, and a broken one
   is recorded here and the run stays open, so keep it simple and exact. No

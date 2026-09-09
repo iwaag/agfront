@@ -1,0 +1,49 @@
+{
+ "schema": "ag.budget.v1",
+ "generated_at": 1788965970.0,
+ "harnesses": {
+  "claude_code": {
+   "harness": "claude_code",
+   "source": "api.anthropic.com/api/oauth/usage",
+   "read_at": 1788965970.0,
+   "plan": "max",
+   "tier": "default_claude_max_5x",
+   "store": "keychain",
+   "windows": [],
+   "ok": false,
+   "error": "access token in Claude Code-credentials expired at 21:15 (keychain renewed 13:15); only a Claude Code login or token refresh rewrites it",
+   "stale": {
+    "harness": "claude_code",
+    "read_at": 1788955200.0,
+    "plan": "max",
+    "windows": [
+     {
+      "kind": "session",
+      "label": "5-hour session",
+      "percent": 12.0,
+      "resets_at": 1788967800.0,
+      "severity": "normal",
+      "scope": null
+     }
+    ]
+   }
+  },
+  "codex": {
+   "harness": "codex",
+   "source": "codex app-server account/rateLimits/read",
+   "read_at": 1788965970.0,
+   "plan": "plus",
+   "ok": true,
+   "error": null,
+   "windows": [
+    {
+     "kind": "5h",
+     "label": "5-hour session",
+     "percent": 16.0,
+     "resets_at": 1788980400.0,
+     "window_minutes": 300
+    }
+   ]
+  }
+ }
+}
