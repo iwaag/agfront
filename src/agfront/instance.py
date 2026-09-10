@@ -48,6 +48,11 @@ PUBLIC_PROFILES = (
 #: Front's roles are its entrance, the Front Desk voice and a routine run, and
 #: an option applies to all three: the conversation is what carries it.
 COVERS = "my own conversations: this entrance, the Front Desk and routine runs"
+#: The roles `COVERS` is a sentence about, and the roles the published pool is
+#: **derived** from (`agag.execpool`). The two must name the same work: a
+#: sentence and a pool that disagree is precisely the failure this list
+#: exists to make impossible.
+EXEC_ROLES = ("front", "character_talk", "routine_run")
 #: What running under no selection costs. Published because a threshold like
 #: "until the pool is 70 % used" cannot be judged against a default that
 #: declines to name a pool.
@@ -93,6 +98,7 @@ SPEC = AgentSpec(
     "front", AGFRONT_ROOT, plan_prefix=FRONT_TOPIC_PREFIX,
     extra_prefixes=(ROUTINE_RUN_PREFIX,),
     exec_options=exec_options(),
+    exec_roles=EXEC_ROLES,
 )
 
 __all__ = [

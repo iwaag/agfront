@@ -75,9 +75,12 @@ against `tools/budget.md` or a fresh `agbudget`:
 First **name the window you are judging**. A request that says "until agy's
 usage exceeds 70 %" is about the pool the `agy` option consumes, so match it
 to the section of `tools/budget.md` marked with that pool, and say in your
-entry which section and which window you read. A section whose pool is
-`unknown`, or a pool with no section at all, cannot be matched: that is an
-unobservable condition, not a condition at 0. "Exceeds N" is strictly past N;
+entry which section and which window you read. An option whose pool is
+several names joined by `+` spends **each** of those accounts, so read every
+one of their sections and let the first to reach the threshold decide. A
+section whose pool is `unknown`, a `+` list with `unknown` in it, or a pool
+with no section at all, cannot be matched: that is an unobservable condition,
+not a condition at 0. "Exceeds N" is strictly past N;
 "until N % used" is reaching N. Keep whichever the opening post recorded.
 
 The condition is about the **shared account window**, not this run's own

@@ -881,3 +881,91 @@ def test_a_callback_answers_home_under_homes_selection(monkeypatch, tmp_path):
     zulip_listener.handle_mention(client, *remote)
     assert next(call for call in calls if call[0] == "front")[6].option == "agy"
 
+
+
+# --- derived usage pools (agag.execpool, refactor p3 ex1 step 3) -----------
+
+import tomllib as _tomllib  # noqa: E402
+
+from agag import execpool  # noqa: E402
+from agag.agent_config import load_config as _load_config  # noqa: E402
+
+
+def _real_config():
+    return _load_config(
+        front_instance.SPEC.agents_config, front_instance.SPEC.agents_local_config
+    )
+
+
+def test_the_named_options_resolve_to_the_pools_they_declare():
+    """A declaration is an assertion, and this is that assertion checked.
+
+    The named options depend only on the committed `agents.toml` — an overlay
+    moves *roles*, not the option-to-profile mapping — so this is
+    deterministic on any machine that can read the config.
+    """
+    declared = {o.name: o.pool for o in front_instance.SPEC.exec_options_with_default()}
+    published = {o.name: o.pool
+                 for o in front_instance.SPEC.published_options("Front").options}
+    assert set(declared) == set(published)
+    for name, pool in declared.items():
+        if name != "default":
+            assert published[name] == pool, name
+
+
+def test_the_default_is_priced_from_the_roles_this_machine_will_run():
+    assert front_instance.SPEC.published_options("Front").get("default").pool not in ("", "-")
+
+
+def test_every_covered_role_is_a_role_front_has_configured():
+    """`exec_roles` is what the pool is derived from, so a name that is not a
+    role would silently price the menu from nothing."""
+    config, _ = _real_config()
+    for role in front_instance.SPEC.exec_roles:
+        assert role in config["roles"], role
+
+
+def test_the_covered_roles_are_the_three_the_sentence_names():
+    # `COVERS` says "this entrance, the Front Desk and routine runs", and the
+    # pool is derived from exactly those. A sentence and a pool about
+    # different work is the failure this pairing exists to prevent.
+    assert front_instance.SPEC.exec_roles == ("front", "character_talk", "routine_run")
+
+
+def test_a_role_moved_in_the_overlay_moves_the_derived_default():
+    """The failure the derivation exists for, on Front's own roles.
+
+    The Front Desk voice has its own profile precisely so it can be moved
+    without touching the ordinary entrance — and that is exactly when a
+    hand-written `pool: anthropic` becomes a lie.
+    """
+    config, _ = _real_config()
+    overlay = _tomllib.loads(
+        'schema = "ag.agent-config.v2"\n[roles.character_talk]\nprofile = "agy"\n'
+    )
+    found = execpool.derive(
+        None, front_instance.SPEC.exec_roles, config, overlay,
+        front_instance.SPEC.profile_for,
+    )
+    assert execpool.JOIN in found.pool and "antigravity" in found.pool
+    declared = front_instance.SPEC.exec_options_with_default()[0]
+    lines = execpool.diagnose([declared], [found])
+    assert len(lines) == 1 and "character_talk -> agy/agy (antigravity)" in lines[0]
+
+
+def test_an_unavailable_harness_is_not_reported_as_a_wrong_declaration(monkeypatch):
+    """Availability is a runtime fact. A CLI that is not installed makes that
+    one option fail when it runs; it must not read as a broken contract, and
+    it must not take an unrelated conversation down."""
+    real = execpool.resolve_role
+
+    def flaky(config, overlay, role, *, profile_override=None, check_available=True):
+        if check_available:
+            raise execpool.AgentConfigError("E_UNAVAILABLE", "nothing is installed")
+        return real(config, overlay, role, profile_override=profile_override,
+                    check_available=False)
+
+    monkeypatch.setattr(execpool, "resolve_role", flaky)
+    published = front_instance.SPEC.published_options("Front")
+    assert published.get("default").pool not in ("", "-")
+    assert front_instance.SPEC.pool_diagnostics() == ()
