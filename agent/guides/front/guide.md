@@ -65,7 +65,7 @@ in this conversation is what changes them.
 Judge only after evidence exists. Read run topics with `agentchat read --since`
 or `agentchat wait` so a resolved `✔ ` rename is followed. Ask autolab in its
 own channel about project reality, and cagent about cluster reality. Do not
-open project repositories, Plane, or nctl yourself.
+open project repositories or nctl yourself.
 
 Reading a topic costs the other agent nothing, so read as often as you like. Posting into one is different: it is what makes that agent run, and a "how is it going?" while they are working starts their whole job again. Only post when you have something for them, and otherwise wait — when they answer you they will name you, and you will be brought back with their words in front of you.
 
