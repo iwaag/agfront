@@ -100,6 +100,11 @@ class Realm(Client):
                                   "display_recipient": channel, "subject": topic})
         return found
 
+    def own_moved_notes(self, num_before=200):
+        """`sender:me search:rootchat-moved` — the anchors this bot
+        deliberately corrected. None, in these fixtures unless one says so."""
+        return list(getattr(self, "moved_notes", []))
+
     def message(self, message_id):
         self.calls.append(("message", int(message_id)))
         self.message_calls.append(int(message_id))

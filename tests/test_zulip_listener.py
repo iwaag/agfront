@@ -87,6 +87,11 @@ class Client:
         in this fixture, so it is party to no other conversation."""
         return []
 
+    def own_moved_notes(self, num_before=200):
+        """`sender:me search:rootchat-moved` — the anchors this bot
+        deliberately corrected. None, in these fixtures unless one says so."""
+        return list(getattr(self, "moved_notes", []))
+
     def send_to_channel(self, channel, topic, content):
         self.calls.append(("post", channel, topic, content))
         return 900
@@ -340,6 +345,11 @@ class Board(Client):
                                   "display_recipient": channel, "subject": topic})
         return found
 
+
+    def own_moved_notes(self, num_before=200):
+        """`sender:me search:rootchat-moved` — the anchors this bot
+        deliberately corrected. None, in these fixtures unless one says so."""
+        return list(getattr(self, "moved_notes", []))
 
 def remote_message(content="task 1 is blocked, what now?", sender_id=11, name="Autolab"):
     return {

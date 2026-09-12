@@ -91,6 +91,11 @@ class Client:
     def own_rootchat_notes(self, num_before=200):
         return []
 
+    def own_moved_notes(self, num_before=200):
+        """`sender:me search:rootchat-moved` — the anchors this bot
+        deliberately corrected. None, in these fixtures unless one says so."""
+        return list(getattr(self, "moved_notes", []))
+
     def topic_history(self, channel, topic, num_before):
         if channel == "agents":
             return [
