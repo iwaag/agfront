@@ -34,6 +34,32 @@ listener, not the run, delivers the report into the origin conversation and
 resolves the run topic, so the origin never carries a root note pointing at
 the run and a resolved run is read as finished by everyone
 (`agentchat send` refuses it, the sweeps skip it).
+
+**Continuing.** The delivery is Front's own post, so it leaves the origin
+with Front as its last speaker — and the owner sweep skips exactly that
+(`sweep_topics`, and the event path's re-check with it). A request that asked
+for one routine is then finished, but a request that asked for something
+*after* the routine has nobody left to notice: Front is never served again,
+and the next stage is never started. `routine_tests` p1 step 1 found that by
+inspection, before the trial.
+
+So the delivery is followed by a **delivered note** in the origin:
+
+    [selfnote][delivered] <run channel>/<run topic>
+
+A note buys nobody a run (`agag.selfnote`), so this changes nothing about who
+the sweeps serve. What it does is make "a report landed here and nothing has
+served this conversation since" a question the *chat* can answer —
+`awaiting_continuation` — which is what the listener's `continue_deliveries`
+asks after every run serving and again at startup. The serving it triggers is
+an ordinary one: the conversation, its chatlog, its own role and guide. **What
+happens next is decided there, in the conversation, by Front** — this module
+knows only that somebody should look, never what any particular request is
+made of.
+
+The note is cleared by speech, and an ack is not speech enough: `is_ack` is
+skipped, so a crash between a serving's ack and its reply leaves the handoff
+still owed rather than silently spent.
 """
 
 from __future__ import annotations
@@ -42,14 +68,32 @@ import json
 import re
 from dataclasses import dataclass
 
-from agag.agent import SWEEP_ACK
-from agag.selfnote import Conversation, is_speech, own_rootchat
-from agag.zulip import ZulipClient, remotes_for_home, rootchat_notes
+from agag.agent import SWEEP_ACK, is_ack
+from agag.selfnote import (
+    Conversation,
+    is_speech,
+    note,
+    own_rootchat,
+    parse_conversation,
+    parse_note,
+)
+from agag.zulip import (
+    LAST_SPEAKER_LOOKBACK,
+    RESOLVED_TOPIC_PREFIX,
+    ZulipClient,
+    live_topic_name,
+    remotes_for_home,
+    rootchat_notes,
+)
 
 #: The topic prefix of a run, in the routine's own channel.
 RUN_PREFIX = "routinerun-"
 #: The role that serves a run topic (`agents.toml`, `agent/guides/routine_run/`).
 ROUTINE_ROLE = "routine_run"
+
+#: The tag of the note that says a run's report landed in this conversation
+#: and nothing has served it since. Front's own; see the module docstring.
+DELIVERED_TAG = "delivered"
 
 SCHEMA = "ag.routinerun-finish.v1"
 FENCE = "ag-routinerun"
@@ -61,6 +105,7 @@ _BLOCK = re.compile(r"```[ \t]*" + re.escape(FENCE) + r"[ \t]*\n(.*?)\n[ \t]*```
 _MENTION = re.compile(r"@\*\*([^*\n]+)\*\*")
 
 __all__ = [
+    "DELIVERED_TAG",
     "ERROR_FENCE",
     "FENCE",
     "ROUTINE_ROLE",
@@ -68,7 +113,11 @@ __all__ = [
     "SCHEMA",
     "FinishError",
     "FinishReport",
+    "awaiting_continuation",
+    "delivered_note",
     "delivery_text",
+    "parse_delivered",
+    "pending_continuations",
     "is_run_topic",
     "opened_runs",
     "origin_of",
@@ -236,3 +285,73 @@ def delivery_text(finish: FinishReport, run: Conversation) -> str:
     return (f"**Routine run finished** — {verdict}. Reason: {finish.reason}\n\n"
             f"{finish.report}\n\n"
             f"Run: #{run.channel} › `{run.topic}` (resolved).")
+
+
+# --- continuing --------------------------------------------------------------
+
+
+def delivered_note(run: Conversation) -> str:
+    """The note written into the requester's conversation after a run's report.
+
+    It names the run whose report just landed. Nothing reads it for the run's
+    sake — the run is over — only to answer "has anybody looked at this
+    conversation since?".
+    """
+    return note(DELIVERED_TAG, str(run))
+
+
+def parse_delivered(content) -> Conversation | None:
+    """The run a delivered note names, or None if this is not one."""
+    return parse_conversation(parse_note(content, DELIVERED_TAG))
+
+
+def awaiting_continuation(history: list[dict], self_id: int) -> Conversation | None:
+    """The run whose report landed here and that nothing has served since.
+
+    Reading forward: our own delivered note arms the handoff, and speech
+    disarms it — whoever spoke, because the developer's own next post is
+    served by the ordinary owner route and Front's reply is the serving this
+    exists to buy. A serving **ack** is not that reply, so it does not
+    disarm: a crash between the ack and the reply leaves the handoff owed,
+    and startup recovery finds it.
+    """
+    pending: Conversation | None = None
+    for message in history:
+        content = str(message.get("content", ""))
+        if is_speech(message):
+            if not is_ack(content.strip()):
+                pending = None
+            continue
+        if message.get("sender_id") != self_id:
+            continue
+        run = parse_delivered(content)
+        if run is not None:
+            pending = run
+    return pending
+
+
+def pending_continuations(
+    client: ZulipClient, self_id: int, *, lookback: int = LAST_SPEAKER_LOOKBACK
+) -> list[Conversation]:
+    """Every conversation of Front's that is holding an unserved run report.
+
+    Asked of the chat, like everything else here: Front's own root notes name
+    each run topic and the conversation it was opened from, so the requesters
+    are found without a ledger. A requester is looked at once however many
+    runs it opened, under its live name, and a resolved one is skipped — a
+    conversation somebody has closed is not one to reopen with a report it has
+    already seen.
+    """
+    seen: set[tuple[str, str]] = set()
+    found: list[Conversation] = []
+    for (_channel, topic), home in rootchat_notes(client, include_resolved=True):
+        if not is_run_topic(topic) or home.as_pair() in seen:
+            continue
+        seen.add(home.as_pair())
+        name = live_topic_name(client, home.channel, home.topic)
+        if name.startswith(RESOLVED_TOPIC_PREFIX):
+            continue
+        history = client.topic_history(home.channel, name, num_before=lookback)
+        if awaiting_continuation(history, self_id) is not None:
+            found.append(Conversation(home.channel, name))
+    return found

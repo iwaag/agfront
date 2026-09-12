@@ -287,13 +287,15 @@ def test_finishing_delivers_the_report_to_the_origin_and_resolves_the_run(monkey
         (RUN_CHANNEL, RUN_TOPIC): [origin_note(), opening(), ack(), entry()],
     })
     zulip_listener.handle_topic(client, RUN_CHANNEL, RUN_TOPIC)
-    # One post outside the run: the report, into the desk, naming the run —
-    # and no root note before it.
+    # Two posts outside the run and both into the desk: the report, naming the
+    # run, and — after it, so a crash between them loses the handoff and never
+    # the report — the delivered note. No root note before either.
     posts = [c for c in calls if c[0] == "post"]
-    assert [c[1:3] for c in posts] == [(CHANNEL, DESK_TOPIC)]
-    delivered = posts[0][3]
+    assert [c[1:3] for c in posts] == [(CHANNEL, DESK_TOPIC), (CHANNEL, DESK_TOPIC)]
+    delivered, handoff = posts[0][3], posts[1][3]
     assert "goal was reached" in delivered and "commit a99625f" in delivered
     assert f"#{RUN_CHANNEL} › `{RUN_TOPIC}`" in delivered and "selfnote" not in delivered
+    assert routine.parse_delivered(handoff) == Conversation(RUN_CHANNEL, RUN_TOPIC)
     # The record at home carries the canonical block, and the run is resolved after it.
     record = replies(calls)[-1]
     assert record.startswith("Autolab reported") and '"schema": "ag.routinerun-finish.v1"' in record
@@ -383,3 +385,235 @@ def test_a_run_topic_carries_its_own_execution_selection(monkeypatch, tmp_path):
     call = runs(calls)[0]
     assert call[4] == zulip_listener.ROUTINE_ROLE
     assert call[6].option == "agy"
+
+
+# --- continuing the request a finished run reported into ---------------------
+#
+# `routine_tests` p1 step 1. The delivery is Front's own post, so the sweeps
+# will never look at the requester's conversation again — a request made of
+# more than one routine had nobody left to start its next stage. What is
+# pinned here is the handoff and its bounds, never what Front decided with it.
+
+
+class LiveRunBoard(RunBoard):
+    """A board whose posts land in the histories, so a whole chain can run.
+
+    `RunBoard` is a snapshot; the continuation is about what the *next* read
+    of a conversation finds, so the delivery, the note and Front's own reply
+    have to be there when it looks.
+    """
+
+    def __init__(self, calls, histories, board=None):
+        super().__init__(calls, histories, board=board)
+        self.next_id = 1000
+
+    def append(self, channel, topic, content, sender_id=BOT_ID, name="Front"):
+        self.next_id += 1
+        self.histories.setdefault((channel, topic), []).append(
+            post(channel, topic, content, id=self.next_id, sender_id=sender_id, name=name)
+        )
+        return self.next_id
+
+    def send_to_channel(self, channel, topic, content):
+        self.calls.append(("post", channel, topic, content))
+        return self.append(channel, topic, content)
+
+    def resolve_topic(self, message_id, topic):
+        super().resolve_topic(message_id, topic)
+        for (channel, name) in list(self.histories):
+            if name == topic:
+                self.histories[(channel, f"✔ {topic}")] = self.histories.pop((channel, name))
+
+
+def wire_live(monkeypatch, tmp_path, calls, client_box, **kw):
+    """`wire_runs`, with replies appended to the board as well as recorded.
+
+    A reply is speech, and speech is what disarms the handoff, so a test that
+    only records replies cannot tell "served once" from "never stops".
+    """
+    wire_runs(monkeypatch, tmp_path, calls, **kw)
+    from agag import topics as shared_topics
+
+    def reply(topic, text, **kwargs):
+        channel = kwargs.get("channel")
+        calls.append(("reply", channel, topic, text))
+        if client_box:
+            client_box[0].append(channel, topic, text)
+        return "success"
+
+    monkeypatch.setattr(shared_topics, "topic_write", reply)
+
+
+def desk_runs(calls):
+    """The servings of the requester's conversation, by role and home."""
+    return [c for c in calls if c[0] == "front" and c[3] == (CHANNEL, DESK_TOPIC)]
+
+
+def finished_run_board(calls, *, finish=FINISH, desk_topic=DESK_TOPIC):
+    return LiveRunBoard(calls, {
+        (CHANNEL, desk_topic): [desk_message("お願い")],
+        (RUN_CHANNEL, RUN_TOPIC): [origin_note(origin=(CHANNEL, desk_topic)),
+                                   opening(), ack(), entry()],
+    })
+
+
+def test_a_finished_run_serves_the_conversation_that_asked_for_it(monkeypatch, tmp_path):
+    """The whole defect, in one test: without the handoff the desk is never
+    served again and a second stage is never started."""
+    calls = []
+    box = []
+    wire_live(monkeypatch, tmp_path, calls, box, answer=FINISH)
+    client = finished_run_board(calls)
+    box.append(client)
+    zulip_listener.handle_topic(client, RUN_CHANNEL, RUN_TOPIC)
+    assert len(desk_runs(calls)) == 1
+    # An ordinary serving of the requester: its own role, its own conversation.
+    assert desk_runs(calls)[0][4] == zulip_listener.CHARACTER_ROLE
+    # And it happened after the run's own record, never before it.
+    assert calls.index(desk_runs(calls)[0]) > max(
+        i for i, c in enumerate(calls) if c[0] == "reply" and c[2] == RUN_TOPIC)
+
+
+def test_the_requester_is_served_once_and_never_answers_itself(monkeypatch, tmp_path):
+    """Front's reply is speech, and speech spends the handoff. A request that
+    asked for one routine ends here rather than replying to itself forever."""
+    calls = []
+    box = []
+    wire_live(monkeypatch, tmp_path, calls, box, answer=FINISH)
+    client = finished_run_board(calls)
+    box.append(client)
+    zulip_listener.handle_topic(client, RUN_CHANNEL, RUN_TOPIC)
+    assert len(desk_runs(calls)) == 1
+    assert zulip_listener.continue_deliveries(client) == []
+    assert len(desk_runs(calls)) == 1
+
+
+def test_a_run_that_missed_its_goal_still_returns_to_the_requester(monkeypatch, tmp_path):
+    """`achieved: false` is a completion too. A request whose first stage
+    failed must reach the conversation that can say what to do about it."""
+    calls = []
+    box = []
+    failed = FINISH.replace('"achieved": true', '"achieved": false')
+    wire_live(monkeypatch, tmp_path, calls, box, answer=failed)
+    client = finished_run_board(calls)
+    box.append(client)
+    zulip_listener.handle_topic(client, RUN_CHANNEL, RUN_TOPIC)
+    assert "ended without reaching" in [c for c in calls if c[0] == "post"][0][3]
+    assert len(desk_runs(calls)) == 1
+
+
+def test_a_restart_between_the_report_and_the_continuation_loses_neither(monkeypatch, tmp_path):
+    """The delivery landed and the listener went down before serving the
+    requester. Nothing sweeps that conversation — Front spoke last — so
+    startup recovery is the only thing that can find it."""
+    calls = []
+    box = []
+    wire_live(monkeypatch, tmp_path, calls, box, answer="the backlog is published; opening the next run")
+    client = LiveRunBoard(calls, {
+        (CHANNEL, DESK_TOPIC): [desk_message("お願い")],
+        (RUN_CHANNEL, f"✔ {RUN_TOPIC}"): [origin_note(topic=f"✔ {RUN_TOPIC}"),
+                                          opening(), ack(), entry()],
+    })
+    box.append(client)
+    client.append(CHANNEL, DESK_TOPIC, "**Routine run finished** — the routine's goal was reached.")
+    client.append(CHANNEL, DESK_TOPIC, routine.delivered_note(Conversation(RUN_CHANNEL, RUN_TOPIC)))
+    assert zulip_listener.recover_runs(client) == [(CHANNEL, DESK_TOPIC)]
+    assert len(desk_runs(calls)) == 1
+
+
+def test_an_ack_does_not_spend_the_handoff():
+    """A crash between a serving's ack and its reply leaves the handoff owed.
+    The ack is our own transport noise, not the serving it promises."""
+    history = [
+        desk_message("お願い"),
+        post(CHANNEL, DESK_TOPIC, "**Routine run finished** — …", id=2),
+        post(CHANNEL, DESK_TOPIC, routine.delivered_note(Conversation(RUN_CHANNEL, RUN_TOPIC)), id=3),
+    ]
+    pending = Conversation(RUN_CHANNEL, RUN_TOPIC)
+    assert routine.awaiting_continuation(history, BOT_ID) == pending
+    assert routine.awaiting_continuation(history + [ack(id=4, channel=CHANNEL, topic=DESK_TOPIC)],
+                                         BOT_ID) == pending
+    spoken = history + [ack(id=4, channel=CHANNEL, topic=DESK_TOPIC),
+                        post(CHANNEL, DESK_TOPIC, "stage A is done; opening stage B", id=5)]
+    assert routine.awaiting_continuation(spoken, BOT_ID) is None
+
+
+def test_the_developer_s_own_next_post_spends_the_handoff():
+    """They spoke, so the owner sweep serves the conversation by the ordinary
+    route. Continuing it here as well would buy the same run twice."""
+    history = [
+        desk_message("お願い"),
+        post(CHANNEL, DESK_TOPIC, "**Routine run finished** — …", id=2),
+        post(CHANNEL, DESK_TOPIC, routine.delivered_note(Conversation(RUN_CHANNEL, RUN_TOPIC)), id=3),
+        post(CHANNEL, DESK_TOPIC, "good — now do the second one", id=4,
+             sender_id=HUMAN_ID, name="Developer"),
+    ]
+    assert routine.awaiting_continuation(history, BOT_ID) is None
+
+
+def test_two_reports_into_one_conversation_serve_it_once(monkeypatch, tmp_path):
+    """Duplicate delivery, or two runs of one request finishing together: the
+    requester is a conversation, and a conversation is served once."""
+    calls = []
+    box = []
+    wire_live(monkeypatch, tmp_path, calls, box, answer=FINISH)
+    second = "routinerun-20260909-1600"
+    client = LiveRunBoard(calls, {
+        (CHANNEL, DESK_TOPIC): [desk_message("お願い")],
+        (RUN_CHANNEL, RUN_TOPIC): [origin_note(), opening(), ack(), entry()],
+        (RUN_CHANNEL, second): [origin_note(id=30, topic=second),
+                                opening(id=31), ack(id=32, topic=second),
+                                entry(id=33, topic=second)],
+    })
+    box.append(client)
+    client.append(CHANNEL, DESK_TOPIC, "**Routine run finished** — …")
+    client.append(CHANNEL, DESK_TOPIC, routine.delivered_note(Conversation(RUN_CHANNEL, second)))
+    zulip_listener.handle_topic(client, RUN_CHANNEL, RUN_TOPIC)
+    assert len(desk_runs(calls)) == 1
+
+
+def test_a_resolved_requester_is_not_reopened(monkeypatch, tmp_path):
+    """Somebody closed the conversation. A report it has already seen is no
+    reason to post into it again."""
+    calls = []
+    box = []
+    wire_live(monkeypatch, tmp_path, calls, box, answer="…")
+    client = LiveRunBoard(calls, {
+        (CHANNEL, f"✔ {DESK_TOPIC}"): [desk_message("お願い")],
+        (RUN_CHANNEL, RUN_TOPIC): [origin_note(), opening(), ack(), entry()],
+    })
+    box.append(client)
+    client.append(CHANNEL, f"✔ {DESK_TOPIC}", "**Routine run finished** — …")
+    client.append(CHANNEL, f"✔ {DESK_TOPIC}",
+                  routine.delivered_note(Conversation(RUN_CHANNEL, RUN_TOPIC)))
+    assert zulip_listener.continue_deliveries(client) == []
+    assert desk_runs(calls) == []
+
+
+def test_a_run_opened_by_hand_writes_no_handoff(monkeypatch, tmp_path):
+    """There is no requester: the report stays in the run's own topic, and a
+    note about a conversation that does not exist would be a lie."""
+    calls = []
+    box = []
+    wire_live(monkeypatch, tmp_path, calls, box, answer=FINISH)
+    client = LiveRunBoard(calls, {
+        (RUN_CHANNEL, RUN_TOPIC): [opening(sender_id=HUMAN_ID, name="Developer"), ack(), entry()],
+    })
+    box.append(client)
+    zulip_listener.handle_topic(client, RUN_CHANNEL, RUN_TOPIC)
+    assert [c for c in calls if c[0] == "post"] == []
+    assert zulip_listener.continue_deliveries(client) == []
+
+
+def test_the_chain_of_stages_is_bounded(monkeypatch, tmp_path):
+    """The handoff is generic, so nothing in it knows a request is finite.
+    The depth bound is what stops a pathological chain inside one serving;
+    the next event picks up whatever is left."""
+    calls = []
+    box = []
+    wire_live(monkeypatch, tmp_path, calls, box, answer=FINISH)
+    client = finished_run_board(calls)
+    box.append(client)
+    assert zulip_listener.continue_deliveries(
+        client, depth=zulip_listener.CONTINUATION_DEPTH) == []
+    assert desk_runs(calls) == []

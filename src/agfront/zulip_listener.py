@@ -115,10 +115,12 @@ from .evidence import format_evidence, write_evidence_threads
 from .instance import SPEC
 from .routine import (
     ROUTINE_ROLE,
+    delivered_note,
     delivery_text,
     is_run_topic,
     opened_runs,
     origin_of,
+    pending_continuations,
     record_text,
     recover_unstarted_runs,
     split_finish,
@@ -152,8 +154,16 @@ RECORDS_ROOT = SPEC.records_root
 # waited to be answered.
 FRONT_TIMEOUT_SECONDS = 360
 
+#: How many stage handoffs one chain of servings may make before it stops and
+#: leaves the rest to the next event. A composite request is sequential — each
+#: stage needs a run that is opened, delegated and answered, so in practice the
+#: chain unwinds long before this — and the bound is here so that a routine
+#: that somehow finished on sight could not recurse without end.
+CONTINUATION_DEPTH = 8
+
 __all__ = [
     "CHARACTER_ROLE",
+    "CONTINUATION_DEPTH",
     "FRONT_DESK_PREFIX",
     "FRONT_ROLE",
     "ROUTINE_ROLE",
@@ -161,6 +171,7 @@ __all__ = [
     "ZULIP_ENV",
     "ListenerError",
     "characters_placement",
+    "continue_deliveries",
     "front_prompt",
     "guide",
     "handle_mention",
@@ -384,11 +395,15 @@ def finish_run(context, output: str) -> TopicResult:
         context.step = "delivery"
         # Directly, never through `agentchat`: a root note pointing at the
         # run must not be written into the requester's conversation.
-        context.client.send_to_channel(
-            origin.channel,
-            live_topic_name(context.client, origin.channel, origin.topic),
-            delivery_text(finish, run),
-        )
+        name = live_topic_name(context.client, origin.channel, origin.topic)
+        context.client.send_to_channel(origin.channel, name, delivery_text(finish, run))
+        # …and, right after it, the note that says a report is sitting there
+        # unread. The delivery is Front's own speech, so the sweeps will never
+        # serve that conversation again on their own; `continue_deliveries`
+        # is what does, and this note is the whole of its memory. Written
+        # after the report so a crash between the two leaves the requester
+        # with the report and no handoff, rather than a handoff and no report.
+        context.client.send_to_channel(origin.channel, name, delivered_note(run))
         log(f"delivered the run's report to {origin}")
         record = record_text(reply, finish, None)
     else:
@@ -396,13 +411,14 @@ def finish_run(context, output: str) -> TopicResult:
     return TopicResult([record], resolve_after=True)
 
 
-def handle_topic(client: ZulipClient, channel: str, topic: str) -> None:
+def handle_topic(client: ZulipClient, channel: str, topic: str, *, depth: int = 0) -> None:
     """Serve one awaiting front topic through the shared skeleton.
 
     A run topic is served without the empty-topic guard: its opening post is
     Front's own, and a topic holding nothing but Front's speech is exactly a
     run waiting to start, not a topic with nothing in it. Afterwards, any
-    run this conversation opened is started.
+    run this conversation opened is started — and, when this *was* a run, any
+    requester it has just reported into is served.
     """
     log(f"front topic {channel!r}/{topic!r}")
     serve_topic(
@@ -410,10 +426,14 @@ def handle_topic(client: ZulipClient, channel: str, topic: str) -> None:
         empty_reply=None if is_run_topic(topic) else EMPTY_REPLY,
         exec_options=exec_options_for(SPEC, client),
     )
-    start_opened_runs(client, (channel, topic))
+    start_opened_runs(client, (channel, topic), depth=depth)
+    if is_run_topic(topic):
+        continue_deliveries(client, depth=depth)
 
 
-def start_opened_runs(client: ZulipClient, home: tuple[str, str]) -> list[tuple[str, str]]:
+def start_opened_runs(
+    client: ZulipClient, home: tuple[str, str], *, depth: int = 0
+) -> list[tuple[str, str]]:
     """Start every run the conversation `home` opened and nobody served yet.
 
     The owner sweep never serves a topic whose last speaker is Front, so the
@@ -431,19 +451,59 @@ def start_opened_runs(client: ZulipClient, home: tuple[str, str]) -> list[tuple[
         if not unstarted(history, self_id):
             continue
         log(f"starting run {run} opened from {home[0]!r}/{home[1]!r}")
-        handle_topic(client, run.channel, run.topic)
+        handle_topic(client, run.channel, run.topic, depth=depth)
         started.append(run.as_pair())
     return started
 
 
+def continue_deliveries(client: ZulipClient, *, depth: int = 0) -> list[tuple[str, str]]:
+    """Serve every conversation holding a run report nothing has answered.
+
+    The counterpart of `start_opened_runs`, at the other end of a run. A run
+    reports into the conversation that asked for it, and that post is Front's
+    own, so no sweep will ever look at that conversation again: a request that
+    wanted something *after* the routine would stop there with nobody to
+    notice. The delivered note (`agfront.routine`) is what makes the pending
+    handoff readable, and this serves it.
+
+    It is deliberately **generic**: it says only that a report has landed and
+    nobody has looked. Whether that means "open the next run", "tell the
+    developer we are done" or "the report says the work failed, so stop" is
+    decided by Front, in the conversation, out of the request and the report
+    it can both read there. Nothing about any particular request is here.
+
+    So an ordinary one-routine request does not loop: this buys exactly one
+    serving, Front's reply to the developer is speech, and speech disarms the
+    note. A second pass finds nothing to do.
+    """
+    if depth >= CONTINUATION_DEPTH:
+        log(f"continuation depth {depth} reached; leaving the rest to the next event")
+        return []
+    self_id = int(client.whoami()["user_id"])
+    continued: list[tuple[str, str]] = []
+    for home in pending_continuations(client, self_id):
+        log(f"continuing {home}: a run reported there and nothing has served it")
+        handle_topic(client, home.channel, home.topic, depth=depth + 1)
+        continued.append(home.as_pair())
+    return continued
+
+
 def recover_runs(client: ZulipClient) -> list[tuple[str, str]]:
-    """At startup: start the runs Front opened before it went down."""
+    """At startup: start the runs Front opened before it went down, and serve
+    the requesters a run reported into while nobody was listening.
+
+    Two halves of the same gap. A crash between opening a run and starting it
+    leaves a run nobody will start; a crash between delivering a report and
+    serving its requester leaves a request nobody will continue. Neither is
+    reachable by a sweep, because Front is the last speaker in both.
+    """
     self_id = int(client.whoami()["user_id"])
     started: list[tuple[str, str]] = []
     for run in recover_unstarted_runs(client, self_id):
         log(f"recovering unstarted run {run}")
         handle_topic(client, run.channel, run.topic)
         started.append(run.as_pair())
+    started.extend(continue_deliveries(client))
     return started
 
 
@@ -495,3 +555,9 @@ def handle_mention(client: ZulipClient, channel: str, topic: str) -> None:
     else:
         log(f"marked {channel!r}/{topic!r} served up to {served} in {home}")
     start_opened_runs(client, home.as_pair())
+    # The common way a run ends: an agent answered, Front was named, and the
+    # serving that read the answer wrote the finish block. Without this the
+    # handoff would only ever fire for a run that finished on its very first
+    # serving, which is the rare one.
+    if is_run_topic(home.topic):
+        continue_deliveries(client)
