@@ -351,6 +351,13 @@ def serve(context) -> TopicResult:
         conversation.as_pair()
         for conversation in remotes_for_home(context.client, context.channel, context.topic)
     ]
+    # A callback reached through the `replaces` relation comes from a topic
+    # Front has never posted in, so no root note of ours names it and
+    # `remotes_for_home` cannot find it — while its text is the whole reason
+    # this serving is happening (`routine_tests` p2 ex1, problem A).
+    for pair in getattr(context, "extra_threads", ()):
+        if pair not in remotes:
+            remotes.append(pair)
     if evidence:
         threads = write_evidence_threads(context.client, front_dir, remotes, context.self_id, drop=is_ack)
     else:
@@ -590,6 +597,16 @@ def handle_mention(client: ZulipClient, channel: str, topic: str) -> None:
     logged and dropped, as in p7. Front's own entrance is `#front`, and
     nothing else opens a request to it.
 
+    **Since `routine_tests` p2 ex1 "never anchored" is asked twice.** Retiring
+    a plan renames its whole topic, which moves every message in it — Front's
+    root note included — and the replacement then takes the freed display
+    name. `rootchat_home` therefore follows the replacement's
+    `[selfnote][replaces]` pointer, one hop, into the conversation this one
+    replaced and looks for Front's own note there. The topic that called is
+    passed as an `extra_thread` whether or not a note of Front's names it:
+    in the inherited case nothing else can discover that the answer Front is
+    being served for is in that conversation.
+
     Afterwards the serving is marked in home with `note_served`
     (`agent_standardize` p9). Because the reply went home, Front is never the
     last poster in the topic that called it, so without the mark a listener
@@ -614,6 +631,11 @@ def handle_mention(client: ZulipClient, channel: str, topic: str) -> None:
     serve_topic(
         client, home.channel, home.topic, serve,
         ack_text=ACK_TEXT,
+        # The topic that called is placed beside the chatlog whether or not a
+        # root note of ours names it. It always does in the ordinary case;
+        # it does not when the anchor was inherited through `replaces`, and
+        # then this is the only way the answer reaches the run that asked.
+        extra_threads=((channel, topic),),
         # A run topic holds nothing but Front's own record: that is the
         # conversation to serve, not an empty one (found by the p1 tests).
         empty_reply=None if is_run_topic(home.topic) else EMPTY_REPLY,
