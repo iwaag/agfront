@@ -116,6 +116,7 @@ __all__ = [
     "awaiting_continuation",
     "delivered_note",
     "delivery_text",
+    "late_answer_text",
     "parse_delivered",
     "pending_continuations",
     "is_run_topic",
@@ -276,6 +277,21 @@ def record_text(reply: str, finish: FinishReport | None, error: str | None) -> s
     elif error is not None:
         parts.append(f"```{ERROR_FENCE}\n{error}\n```")
     return "\n\n".join(parts) if parts else (reply or "")
+
+
+def late_answer_text(run: Conversation, remote: Conversation) -> str:
+    """Told to the requester when a finished run's delegate answers anyway.
+
+    A run that has ended is not reopened — it is resolved, and a resolved
+    conversation is finished for everybody. But the answer is real work, and
+    the request that asked for the run may still be live, so it is named here
+    rather than dropped: the conversation decides whether it needs another run.
+    """
+    return (f"**A finished routine run was answered.** #{run.channel} › `{run.topic}` "
+            f"has already ended and is resolved, and an answer arrived afterwards in "
+            f"#{remote.channel} › `{remote.topic}`.\n\n"
+            f"Nothing has been done with it. Read that topic and decide whether the work "
+            f"this request is waiting for still needs a run.")
 
 
 def delivery_text(finish: FinishReport, run: Conversation) -> str:

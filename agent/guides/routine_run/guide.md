@@ -59,8 +59,10 @@ yourself and for whoever reads the run afterwards.
    them.
 6. Write your entry (the reply): what you asked and where (channel, topic),
    what came back (with message ids), what you are waiting for, and what
-   you decided and why. Then finish the serving. You will run again when an
-   agent you wrote to answers and names you.
+   you decided and why. That entry **is** the end of the serving — just stop
+   writing. There is nothing to add that says "serving over"; the block below
+   is not that, and writing one here would end the whole run.
+   You will run again when an agent you wrote to answers and names you.
 
 Never post into the routine's `guide` topic. Never open another
 `routinerun-` topic yourself for this run.
@@ -117,10 +119,37 @@ is the goal, `reason` is why the run ends — "the 5-hour window reached
 
 # Ending the run
 
-When the conditions in the opening post are met, or the run cannot go on,
-end it: no new work is started, the report is written, and this topic is
-resolved by the listener after your entry. End the reply with **one fenced
-block** in exactly this shape, after your entry:
+**A serving ending and the run ending are different events.** Most servings
+end the first way: you write your entry and stop. The run is still open, the
+topic stays unresolved, and the next answer brings you back. That is the
+normal case and it needs no block, no marker and no announcement.
+
+The block below ends the **run**. Writing it is an irreversible act, not a
+status update: the listener reads it, posts your report into the conversation
+that asked for this run, and resolves this topic. A resolved run cannot be
+continued — an answer that arrives afterwards is not served here, because a
+resolved conversation is finished for everybody.
+
+So, before you write it, ask one question: **is there anybody I am waiting
+for?** If you have just delegated something, if a task is running, if you
+wrote "waiting on …" anywhere in your entry — then the answer is yes and
+**you must not write the block at all.** Not with `achieved: false`, not with
+a `reason` that says the run continues, not with a `report` that says "not
+applicable yet". A block that says the run is still going is a contradiction
+the listener cannot detect and will act on anyway: it will end the run while
+your work is still in flight. `routine_tests` p1 lost three runs to exactly
+that, each one having written a block whose own text said it was not finished.
+
+`achieved: false` does **not** mean "not done yet". It means *this run is
+stopping and the routine's goal was not reached* — the work failed, or a
+usage condition was hit, or you are deliberately abandoning something in
+flight. If the run is simply not finished, it is not ending, and there is no
+block.
+
+When the conditions in the opening post really are met, or the run genuinely
+cannot go on, end it: no new work is started, the report is written, and this
+topic is resolved by the listener after your entry. End the reply with **one
+fenced block** in exactly this shape, after your entry:
 
 ```ag-routinerun
 {"schema": "ag.routinerun-finish.v1",
@@ -141,7 +170,8 @@ block** in exactly this shape, after your entry:
   is recorded here and the run stays open, so keep it simple and exact. No
   `@**name**` mentions anywhere in it.
 - Do not write the block while a delegation is still in flight unless you
-  are deliberately abandoning it; say so in `reason` if you are.
+  are deliberately abandoning it; say so in `reason` if you are. If you are
+  not abandoning it, write no block and end the serving instead.
 
 # Last thing
 

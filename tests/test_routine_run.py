@@ -407,6 +407,11 @@ class LiveRunBoard(RunBoard):
         super().__init__(calls, histories, board=board)
         self.next_id = 1000
 
+    def channel_topics(self, stream_id):
+        """The topics these fixtures actually hold, so the `✔ ` rename is
+        visible to `live_topic_name` the way it is in the realm."""
+        return [topic for (_channel, topic) in self.histories] + list(self.board)
+
     def append(self, channel, topic, content, sender_id=BOT_ID, name="Front"):
         self.next_id += 1
         self.histories.setdefault((channel, topic), []).append(
@@ -617,3 +622,102 @@ def test_the_chain_of_stages_is_bounded(monkeypatch, tmp_path):
     assert zulip_listener.continue_deliveries(
         client, depth=zulip_listener.CONTINUATION_DEPTH) == []
     assert desk_runs(calls) == []
+
+
+# --- a callback for a run that has already ended -----------------------------
+#
+# `routine_tests` p1 step 3, three times live. Ending a run resolves its topic,
+# and resolving *renames* it; the callback route then read the name the root
+# note recorded, found nothing under it, and posted — forking a twin beside the
+# real conversation, without the origin note, so the twin's report could never
+# be delivered to anybody.
+
+
+def resolved_run_board(calls, *, origin=True, origin_resolved=False):
+    desk = f"✔ {DESK_TOPIC}" if origin_resolved else DESK_TOPIC
+    run_history = [opening(), ack(), entry()]
+    if origin:
+        run_history.insert(0, origin_note(topic=f"✔ {RUN_TOPIC}"))
+    return LiveRunBoard(calls, {
+        (CHANNEL, desk): [desk_message("お願い")],
+        (RUN_CHANNEL, f"✔ {RUN_TOPIC}"): run_history,
+        (WORK_CHANNEL, WORK_TOPIC): [run_note(), answer()],
+    })
+
+
+def test_a_callback_into_a_finished_run_forks_no_twin(monkeypatch, tmp_path):
+    calls = []
+    box = []
+    wire_live(monkeypatch, tmp_path, calls, box, answer="should never run")
+    client = resolved_run_board(calls)
+    box.append(client)
+    zulip_listener.handle_mention(client, WORK_CHANNEL, WORK_TOPIC)
+    # Nothing was served, and above all nothing was posted under the bare name.
+    assert runs(calls) == []
+    assert (RUN_CHANNEL, RUN_TOPIC) not in client.histories
+    assert not any(c[0] in ("post", "reply") and c[2] == RUN_TOPIC for c in calls)
+
+
+def test_a_late_answer_reaches_the_request_that_asked_for_the_run(monkeypatch, tmp_path):
+    """The run is over, but the request may not be. The answer is real work,
+    so the conversation that can decide about it is told."""
+    calls = []
+    box = []
+    wire_live(monkeypatch, tmp_path, calls, box, answer="…")
+    client = resolved_run_board(calls)
+    box.append(client)
+    zulip_listener.handle_mention(client, WORK_CHANNEL, WORK_TOPIC)
+    posts = [c for c in calls if c[0] == "post" and c[1:3] == (CHANNEL, DESK_TOPIC)]
+    assert len(posts) == 2
+    assert "already ended" in posts[0][3] and WORK_TOPIC in posts[0][3]
+    assert routine.parse_delivered(posts[1][3]) == Conversation(RUN_CHANNEL, RUN_TOPIC)
+    # …and that note is what brings the requester back for a decision.
+    assert routine.awaiting_continuation(
+        client.histories[(CHANNEL, DESK_TOPIC)], BOT_ID
+    ) == Conversation(RUN_CHANNEL, RUN_TOPIC)
+
+
+def test_a_late_answer_is_marked_served_so_a_restart_is_quiet(monkeypatch, tmp_path):
+    calls = []
+    box = []
+    wire_live(monkeypatch, tmp_path, calls, box, answer="…")
+    client = resolved_run_board(calls)
+    box.append(client)
+    zulip_listener.handle_mention(client, WORK_CHANNEL, WORK_TOPIC)
+    marks = sweep_rootchats(client, BOT_ID, "Front")
+    assert (WORK_CHANNEL, WORK_TOPIC) not in marks
+
+
+def test_a_late_answer_for_a_finished_request_is_recorded_nowhere(monkeypatch, tmp_path):
+    """Both ends closed. There is nobody to tell, and inventing somewhere to
+    post it would be worse than saying so in the log."""
+    calls = []
+    box = []
+    wire_live(monkeypatch, tmp_path, calls, box, answer="…")
+    client = resolved_run_board(calls, origin_resolved=True)
+    box.append(client)
+    zulip_listener.handle_mention(client, WORK_CHANNEL, WORK_TOPIC)
+    assert [c for c in calls if c[0] == "post" and c[1] == CHANNEL] == []
+    assert runs(calls) == []
+
+
+def test_a_finished_conversation_that_is_not_a_run_is_simply_left(monkeypatch, tmp_path):
+    """The rule is about resolved conversations, not about runs. A finished
+    `front-` conversation is not reopened either, and has no origin to tell."""
+    calls = []
+    box = []
+    wire_live(monkeypatch, tmp_path, calls, box, answer="…")
+    client = LiveRunBoard(calls, {
+        (CHANNEL, f"✔ {DESK_TOPIC}"): [desk_message("お願い")],
+        (WORK_CHANNEL, WORK_TOPIC): [
+            post(WORK_CHANNEL, WORK_TOPIC, rootchat_note(Conversation(CHANNEL, DESK_TOPIC)), id=20),
+            answer(),
+        ],
+    })
+    box.append(client)
+    zulip_listener.handle_mention(client, WORK_CHANNEL, WORK_TOPIC)
+    assert runs(calls) == []
+    # Only the served mark, which is a selfnote and buys nobody a run.
+    posted = [c for c in calls if c[0] == "post"]
+    assert [routine.parse_delivered(c[3]) for c in posted] == [None]
+    assert all(c[3].startswith("[selfnote][served]") for c in posted)

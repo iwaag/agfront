@@ -101,6 +101,7 @@ from agag.intro import write_agents_md
 from agag.selfnote import Conversation
 from agag.zulip import (
     LAST_SPEAKER_LOOKBACK,
+    RESOLVED_TOPIC_PREFIX,
     ZulipClient,
     live_topic_name,
     log,
@@ -117,6 +118,7 @@ from .routine import (
     ROUTINE_ROLE,
     delivered_note,
     delivery_text,
+    late_answer_text,
     is_run_topic,
     opened_runs,
     origin_of,
@@ -176,6 +178,7 @@ __all__ = [
     "guide",
     "handle_mention",
     "handle_topic",
+    "relay_late_answer",
     "recover_runs",
     "role_for",
     "run_front",
@@ -507,6 +510,46 @@ def recover_runs(client: ZulipClient) -> list[tuple[str, str]]:
     return started
 
 
+def relay_late_answer(
+    client: ZulipClient, home: Conversation, live: str,
+    channel: str, topic: str, self_id: int,
+) -> None:
+    """A callback for one of our conversations that has already finished.
+
+    Nothing is reopened. A resolved conversation is finished for everybody —
+    `agentchat send` refuses it and every sweep skips it — and the one route
+    that did not respect that was this one, which forked a twin instead.
+
+    The answer is not dropped either. When the finished conversation is a
+    routine run, the request that opened it may still be live, so the run's
+    origin is told that an answer arrived after the end, and the delivered
+    note puts that conversation in front of Front again. What to do about it
+    — another run, or nothing — is decided there, as everything else is.
+
+    Either way the callback is marked served, so it is not reconsidered on
+    every restart.
+    """
+    log(f"mention in {channel!r}/{topic!r} belongs to {home}, which is finished; not reopening it")
+    resting = Conversation(home.channel, live)
+    if is_run_topic(home.topic):
+        history = client.topic_history(home.channel, live, num_before=HISTORY_MESSAGES)
+        origin = origin_of(history, self_id)
+        if origin is not None and origin != home:
+            name = live_topic_name(client, origin.channel, origin.topic)
+            if name.startswith(RESOLVED_TOPIC_PREFIX):
+                log(f"{origin} is finished too; the late answer is recorded nowhere")
+            else:
+                client.send_to_channel(
+                    origin.channel, name,
+                    late_answer_text(home, Conversation(channel, topic)),
+                )
+                client.send_to_channel(origin.channel, name, delivered_note(home))
+                log(f"told {origin} that {home} was answered after it ended")
+    served = note_served(client, resting, channel, topic)
+    if served is not None:
+        log(f"marked {channel!r}/{topic!r} served up to {served} in {resting}")
+
+
 def handle_mention(client: ZulipClient, channel: str, topic: str) -> None:
     """Front was named somewhere it does not own: serve the request it came from.
 
@@ -536,6 +579,15 @@ def handle_mention(client: ZulipClient, channel: str, topic: str) -> None:
     home = rootchat_home(client, channel, topic, self_id)
     if home is None:
         log(f"mention in {channel!r}/{topic!r} carries no root note of ours; ignoring")
+        return
+    # A resolved home is a finished conversation, and serving it would not
+    # even reach it: resolving *renames* a topic, so reading the name the root
+    # note recorded finds nothing, and the reply opens a second topic beside
+    # the real one — a twin, without the origin note, whose report can never be
+    # delivered. `routine_tests` p1 step 3 watched that happen three times.
+    live = live_topic_name(client, home.channel, home.topic)
+    if live.startswith(RESOLVED_TOPIC_PREFIX):
+        relay_late_answer(client, home, live, channel, topic, self_id)
         return
     log(f"mention in {channel!r}/{topic!r} serves {home}")
     serve_topic(
