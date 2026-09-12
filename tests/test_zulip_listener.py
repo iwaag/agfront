@@ -162,10 +162,17 @@ def test_the_chatlog_and_the_prompt_are_the_run_s_whole_input(monkeypatch, tmp_p
     )
     assert prompt == (
         "The chatlog is placed in the working directory. "
-        "You are 'Front' in the chatlog.\n\nFRONT GUIDE"
+        "You are 'Front' in the chatlog.\n"
+        "\n"
+        + topics.conversation_context(f"[Developer] {REQUEST}\n")
+        + "\n\nFRONT GUIDE"
     )
     assert cwd == gen_dir(tmp_path, 1)
+    # The same bytes are in the file and in the prompt: one rendering, one
+    # snapshot, so a run cannot be shown two versions of one conversation
+    # (`routine_tests` p2 ex1 step 2).
     assert (cwd / "chatlog.md").read_text() == f"[Developer] {REQUEST}\n"
+    assert REQUEST in prompt and "Developer" in prompt
     # The run posts as a participant of this conversation, so an answer to
     # whatever it says elsewhere comes back here.
     assert home == (CHANNEL, TOPIC)

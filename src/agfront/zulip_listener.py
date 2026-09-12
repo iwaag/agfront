@@ -65,6 +65,15 @@ the threads — and `agfront.dialogue` validates and re-serializes it before
 the post, stamping the revision. An unusable block becomes an
 `ag-dialogue-error` fence after the reply, never a re-run.
 
+**Since `routine_tests` p2 ex1 the conversation is in the prompt.** It used
+to be only `chatlog.md` — a file the run had to decide to open — and a reply
+produced in one turn with no tool calls therefore saw nothing and said so,
+twice out of p2's first two requests, with the request sitting verbatim in
+that file. `serve` now renders the conversation once and gives those same
+bytes to both the file and the prompt (`agag.topics.conversation_context`),
+for all three roles. The file stays: it is the complete copy, and the
+prompt's is bounded and says so.
+
 **Since p9 a served callback is marked.** Answering at home means Front never
 becomes the last poster in the topic that called it, so recovery would find
 that topic still naming Front and serve the exchange again on every restart.
@@ -85,6 +94,7 @@ from agag.topics import (
     TopicResult,
     chatlog_placement,
     chatlog_path,
+    conversation_context,
     format_chatlog,
     generation_dir,
     guide as shared_guide,
@@ -223,9 +233,9 @@ def characters_placement(revision: str | None, reason: str | None = None) -> str
 
 def front_prompt(
     bot_name: str, threads=(), root: Path | None = None, role: str = FRONT_ROLE,
-    *, characters: str | None = None,
+    *, characters: str | None = None, conversation: str = "",
 ) -> str:
-    """The placement lines, then the role's guide.
+    """The conversation, the placement lines, then the role's guide.
 
     Placement says where the files are; the guide says what to produce. The
     threads line only appears when there are threads, so a first request
@@ -233,12 +243,24 @@ def front_prompt(
     role's own (`agent/guides/<role>/guide.md`): the voice is defined there,
     not by the role's name. `characters` is the Front Desk's placement line
     for `characters.md`, present only for that role.
+
+    `conversation` is the rendered chatlog of *this* serving — the same bytes
+    written to `chatlog.md`, carried in the prompt by
+    `agag.topics.conversation_context`. Before `routine_tests` p2 ex1 the
+    conversation reached a run only as a file it had to decide to open, and a
+    one-turn reply with no tool calls answered a real request as though the
+    topic were empty. The file stays: it is complete, and the prompt copy is
+    bounded. All three roles get it — a Front Desk turn, a `front-*` request
+    and a routine run are all servings of a conversation.
     """
     lines = [chatlog_placement(bot_name)]
     if placement := threads_placement(threads, root or Path(".")):
         lines.append(placement)
     if characters:
         lines.append(characters)
+    if conversation:
+        lines.append("")
+        lines.append(conversation)
     return prompt_with_guide(lines, guide(role, "guide.md"))
 
 
@@ -313,18 +335,16 @@ def serve(context) -> TopicResult:
             )
 
     context.step = "chatlog"
+    # Rendered once. The same bytes are the file and the prompt's copy, so a
+    # run can never be shown two versions of one conversation.
     if evidence:
-        chatlog_path(front_dir).write_text(
-            format_evidence(context.history, context.self_id, channel=context.channel,
-                            topic=context.topic, drop=is_ack,
-                            bounded=len(context.history) >= HISTORY_MESSAGES,
-                            history_messages=HISTORY_MESSAGES),
-            encoding="utf-8",
-        )
+        chatlog = format_evidence(context.history, context.self_id, channel=context.channel,
+                                  topic=context.topic, drop=is_ack,
+                                  bounded=len(context.history) >= HISTORY_MESSAGES,
+                                  history_messages=HISTORY_MESSAGES)
     else:
-        chatlog_path(front_dir).write_text(
-            format_chatlog(context.history, context.self_id, drop=is_ack), encoding="utf-8"
-        )
+        chatlog = format_chatlog(context.history, context.self_id, drop=is_ack)
+    chatlog_path(front_dir).write_text(chatlog, encoding="utf-8")
 
     context.step = "threads"
     remotes = [
@@ -351,6 +371,7 @@ def serve(context) -> TopicResult:
             context.bot_name, threads, front_dir, role,
             characters=(characters_placement(settings.revision if settings else None, settings_note)
                         if desk else None),
+            conversation=conversation_context(chatlog),
         ),
         front_dir,
         (context.channel, context.topic),
