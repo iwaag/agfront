@@ -25,7 +25,7 @@ is simply the next serving.
 
 **Since `agent_standardize` p7 a supervision is not a long run — it is
 several short ones.** Front posts into another agent's topic and finishes;
-when that agent's reply names Front, `sweep_serve`'s mention route serves
+when that agent's reply names Front, `agag.listen`'s mention route serves
 this `front-*` conversation again with the remote thread beside its chatlog,
 and Front answers there. Nothing blocks, nothing is backgrounded, and a run
 that ends is not a supervision that stopped.

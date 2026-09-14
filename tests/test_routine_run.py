@@ -11,7 +11,8 @@ that a finish block ends the run where the request came from.
 
 from agag.agent import SWEEP_ACK
 from agag.selfnote import Conversation, rootchat_note, served_note
-from agag.zulip import sweep_rootchats
+from agag.selfnote import last_real_message
+from agag.zulip import rootchat_notes, served_marks
 
 from agfront import routine, zulip_listener
 from test_zulip_listener import (
@@ -93,6 +94,25 @@ class RunBoard(Board):
                 if row.get("sender_id") == BOT_ID and str(row.get("content", "")).startswith("[selfnote][served]"):
                     found.append({**row, "type": "stream", "display_recipient": channel, "subject": topic})
         return found
+
+
+def anchored_awaiting(client, self_id, bot_name):
+    """The topics Front anchored that are waiting on it: the last real post
+    there is somebody else's, names Front, and is newer than the served
+    mark — the rule `agag.listen.Listener.recover` applies from the mirror's
+    index, spelled out over these fixtures' Zulip-shaped board."""
+    marks = served_marks(client)
+    found = []
+    for (channel, topic), _home in rootchat_notes(client):
+        last = last_real_message(client.topic_history(channel, topic, num_before=30))
+        if last is None or last.get("sender_id") == self_id:
+            continue
+        if f"@**{bot_name}**" not in str(last.get("content", "")):
+            continue
+        if int(last.get("id") or 0) <= marks.get((channel, topic), 0):
+            continue
+        found.append((channel, topic))
+    return found
 
 
 def wire_runs(monkeypatch, tmp_path, calls, *, budget_source=None, **kw):
@@ -254,13 +274,13 @@ def test_a_callback_already_answered_is_not_served_again():
         (RUN_CHANNEL, RUN_TOPIC): [origin_note(), opening(), ack(), entry()],
         (WORK_CHANNEL, WORK_TOPIC): [run_note(), answer()],
     }
-    assert sweep_rootchats(RunBoard(calls, histories), BOT_ID, "Front") == [(WORK_CHANNEL, WORK_TOPIC)]
+    assert anchored_awaiting(RunBoard(calls, histories), BOT_ID, "Front") == [(WORK_CHANNEL, WORK_TOPIC)]
     histories[(RUN_CHANNEL, RUN_TOPIC)].append(
         post(RUN_CHANNEL, RUN_TOPIC, served_note(Conversation(WORK_CHANNEL, WORK_TOPIC), 21), id=13))
-    assert sweep_rootchats(RunBoard(calls, histories), BOT_ID, "Front") == []
+    assert anchored_awaiting(RunBoard(calls, histories), BOT_ID, "Front") == []
     # The run topic itself (anchored to the desk, last speaker Front) never
     # counts as waiting on anybody.
-    assert (RUN_CHANNEL, RUN_TOPIC) not in sweep_rootchats(RunBoard(calls, histories), BOT_ID, "Front")
+    assert (RUN_CHANNEL, RUN_TOPIC) not in anchored_awaiting(RunBoard(calls, histories), BOT_ID, "Front")
 
 
 def test_recovery_starts_an_unstarted_run_after_a_restart(monkeypatch, tmp_path):
@@ -684,7 +704,7 @@ def test_a_late_answer_is_marked_served_so_a_restart_is_quiet(monkeypatch, tmp_p
     client = resolved_run_board(calls)
     box.append(client)
     zulip_listener.handle_mention(client, WORK_CHANNEL, WORK_TOPIC)
-    marks = sweep_rootchats(client, BOT_ID, "Front")
+    marks = anchored_awaiting(client, BOT_ID, "Front")
     assert (WORK_CHANNEL, WORK_TOPIC) not in marks
 
 

@@ -69,6 +69,7 @@ import re
 from dataclasses import dataclass
 
 from agag.agent import SWEEP_ACK, is_ack
+from agag.listen import current_mirror
 from agag.selfnote import (
     Conversation,
     is_speech,
@@ -76,6 +77,8 @@ from agag.selfnote import (
     own_rootchat,
     parse_conversation,
     parse_note,
+    MOVED_TAG,
+    ROOTCHAT_TAG,
 )
 from agag.zulip import (
     LAST_SPEAKER_LOOKBACK,
@@ -106,6 +109,9 @@ _MENTION = re.compile(r"@\*\*([^*\n]+)\*\*")
 
 __all__ = [
     "DELIVERED_TAG",
+    "MirrorReader",
+    "ZulipReader",
+    "reader_for",
     "ERROR_FENCE",
     "FENCE",
     "ROUTINE_ROLE",
@@ -157,31 +163,110 @@ def unstarted(history: list[dict], self_id: int) -> bool:
     )
 
 
+class ZulipReader:
+    """Front's own root notes and the conversations they name, asked of
+    Zulip: two own-note searches and one history read per conversation."""
+
+    def __init__(self, client: ZulipClient):
+        self.client = client
+
+    def rootchats(self, *, include_resolved: bool = False) -> list[tuple[tuple[str, str], Conversation]]:
+        return rootchat_notes(self.client, include_resolved=include_resolved)
+
+    def history(self, channel: str, topic: str, num_before: int) -> list[dict]:
+        return self.client.topic_history(channel, topic, num_before=num_before)
+
+    def live_name(self, channel: str, topic: str) -> str:
+        return live_topic_name(self.client, channel, topic)
+
+
+class MirrorReader:
+    """The same questions, answered by the listener's mirror — no Zulip call.
+
+    `better_zulip_call` p1 step 5: `agag.listen` runs a mirror of the realm on
+    Front's own credential, and the recovery that used to be two searches and
+    a read per run is a query of its notes index. The root-note rules are
+    `agag.zulip.rootchat_notes`'s exactly: the earliest ordinary note anchors
+    a topic, the newest deliberate move overrides it, and a resolved topic is
+    listed only on request, under its bare name.
+    """
+
+    def __init__(self, mirror, self_id: int):
+        self.mirror = mirror
+        self.self_id = self_id
+
+    def rootchats(self, *, include_resolved: bool = False) -> list[tuple[tuple[str, str], Conversation]]:
+        ordinary: dict[tuple[str, str], Conversation] = {}
+        moved: dict[tuple[str, str], tuple[int, Conversation]] = {}
+        order: list[tuple[str, str]] = []
+        notes = self.mirror.notes(tag=ROOTCHAT_TAG, sender_id=self.self_id) + \
+            self.mirror.notes(tag=MOVED_TAG, sender_id=self.self_id)
+        for note in sorted(notes, key=lambda n: n.message_id):
+            home = parse_conversation(note.value)
+            if home is None:
+                continue
+            topic = note.topic
+            if topic.startswith(RESOLVED_TOPIC_PREFIX):
+                if not include_resolved:
+                    continue
+                topic = topic[len(RESOLVED_TOPIC_PREFIX):]
+            key = (note.channel, topic)
+            if key not in ordinary and key not in moved:
+                order.append(key)
+            if note.tag == MOVED_TAG:
+                if note.message_id >= moved.get(key, (-1, None))[0]:
+                    moved[key] = (note.message_id, home)
+            elif key not in ordinary:
+                ordinary[key] = home
+        return [(key, moved[key][1] if key in moved else ordinary[key]) for key in order
+                if key in moved or key in ordinary]
+
+    def history(self, channel: str, topic: str, num_before: int) -> list[dict]:
+        return self.mirror.history(channel, topic, num_before=num_before, across_resolve=False)
+
+    def live_name(self, channel: str, topic: str) -> str:
+        return self.mirror.live_name(channel, topic) or topic
+
+
+def reader_for(client: ZulipClient):
+    """The mirror's reader when a listener is running, Zulip's otherwise."""
+    mirror = current_mirror()
+    if mirror is not None and mirror.self_id is not None:
+        return MirrorReader(mirror, mirror.self_id)
+    return ZulipReader(client)
+
+
 def opened_runs(client: ZulipClient, home: tuple[str, str]) -> list[Conversation]:
     """The run topics the conversation `home` has opened, oldest first.
 
     Read from the chat: a run topic carries Front's root note naming the
     conversation it was opened from, exactly as a delegate's topic does.
     """
-    return [
-        remote for remote in remotes_for_home(client, home[0], home[1])
-        if is_run_topic(remote.topic)
-    ]
+    wanted = Conversation(*home)
+    found: list[Conversation] = []
+    for (channel, topic), anchored in reader_for(client).rootchats(include_resolved=True):
+        if anchored != wanted or not is_run_topic(topic):
+            continue
+        remote = Conversation(channel, topic)
+        if remote not in found:
+            found.append(remote)
+    return found
 
 
 def recover_unstarted_runs(client: ZulipClient, self_id: int, *, lookback: int = 50) -> list[Conversation]:
     """Every run topic Front opened, from any conversation, that was never served.
 
     Startup recovery: the serving that opened a run starts it, and a crash
-    between the two leaves a run nobody will start — the owner sweep skips a
+    between the two leaves a run nobody will start — the owner route skips a
     topic whose last speaker is Front. Asked of the chat, as everything else
     is: Front's own root notes name every topic it opened.
     """
+    reader = reader_for(client)
     found: list[Conversation] = []
-    for (channel, topic), _home in rootchat_notes(client):
+    for (channel, topic), _home in reader.rootchats():
         if not is_run_topic(topic):
             continue
-        history = client.topic_history(channel, topic, num_before=lookback)
+        history = reader.history(channel, topic, lookback)
         if unstarted(history, self_id):
             found.append(Conversation(channel, topic))
     return found
@@ -358,16 +443,17 @@ def pending_continuations(
     conversation somebody has closed is not one to reopen with a report it has
     already seen.
     """
+    reader = reader_for(client)
     seen: set[tuple[str, str]] = set()
     found: list[Conversation] = []
-    for (_channel, topic), home in rootchat_notes(client, include_resolved=True):
+    for (_channel, topic), home in reader.rootchats(include_resolved=True):
         if not is_run_topic(topic) or home.as_pair() in seen:
             continue
         seen.add(home.as_pair())
-        name = live_topic_name(client, home.channel, home.topic)
+        name = reader.live_name(home.channel, home.topic)
         if name.startswith(RESOLVED_TOPIC_PREFIX):
             continue
-        history = client.topic_history(home.channel, name, num_before=lookback)
+        history = reader.history(home.channel, name, lookback)
         if awaiting_continuation(history, self_id) is not None:
             found.append(Conversation(home.channel, name))
     return found

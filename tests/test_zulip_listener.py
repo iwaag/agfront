@@ -566,13 +566,15 @@ def test_the_listener_is_the_skeleton_with_one_route_and_the_mention_route(monke
         listener, "listener_main",
         lambda spec, routes, **kw: handed.update(spec=spec, routes=routes, **kw),
     )
-    monkeypatch.setattr(listener, "recover_runs", lambda client: handed.update(recovered=True))
     listener.main()
     assert handed["spec"] is zulip_listener.SPEC
     assert handed["routes"] == {"front-": zulip_listener.handle_topic,
                                 "routinerun-": zulip_listener.handle_topic}
     assert handed["on_mention"] is zulip_listener.handle_mention
-    assert handed["recovered"] is True
+    # Run recovery is the listener's recovery hook: it runs after the startup
+    # recovery and after every resync, off the mirror (`better_zulip_call`
+    # p1 step 5) — not once before the loop against Zulip.
+    assert handed["on_recover"] is zulip_listener.recover_runs
     # `front-` and its own `routinerun-` are the only prefixes swept: Front
     # never answers the topics it opens in other agents' channels, by filter
     # and not by luck.
