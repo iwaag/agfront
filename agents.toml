@@ -115,4 +115,6 @@ model = "anthropic/claude-sonnet-5"
 [roles.argue]
 profile = "argue"
 requires = []
-allowed_tools = "Read,Glob,Grep,Bash(agentchat:*)"
+# `agproject` (agfront.project) is how an argue ends in something: a project
+# or study channel with its document, and the workspace asked of autolab.
+allowed_tools = "Read,Write,Glob,Grep,Bash(agentchat:*),Bash(agproject:*)"

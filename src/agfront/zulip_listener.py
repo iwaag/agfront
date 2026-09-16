@@ -628,9 +628,15 @@ def handle_mention(client: ZulipClient, channel: str, topic: str) -> None:
         relay_late_answer(client, home, live, channel, topic, self_id)
         return
     log(f"mention in {channel!r}/{topic!r} serves {home}")
+    # An argue home (`argue` p1 step 3): served by the argue role, without
+    # the hand-off mention, exactly as its owner route serves it.
+    from .argue import serve_argue
+    from agag.argue import is_argue_topic
+
+    argued = is_argue_topic(home.channel, home.topic)
     serve_topic(
-        client, home.channel, home.topic, serve,
-        ack_text=ACK_TEXT,
+        client, home.channel, home.topic, serve_argue if argued else serve,
+        ack_text=ACK_TEXT, handoff=not argued,
         # The topic that called is placed beside the chatlog whether or not a
         # root note of ours names it. It always does in the ordinary case;
         # it does not when the anchor was inherited through `replaces`, and

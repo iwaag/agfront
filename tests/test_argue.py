@@ -58,6 +58,15 @@ class Client:
         return [{"user_id": HUMAN_ID, "is_bot": False}, {"user_id": BOT_ID, "is_bot": True},
                 {"user_id": OTHER_BOT, "is_bot": True}]
 
+    def own_rootchat_notes(self, num_before=200):
+        return []
+
+    def own_moved_notes(self, num_before=200):
+        return []
+
+    def resolve_topic(self, message_id, topic):
+        self.calls.append(("resolve", message_id, topic))
+
     def send_to_channel(self, channel, topic, content):
         self.calls.append(("post", channel, topic, content))
         self.history.append(message(sender_id=BOT_ID, name="Front", content=content, id=900 + len(self.calls)))
@@ -78,7 +87,7 @@ def wire(monkeypatch, tmp_path, calls, *, answer="on it"):
 
     monkeypatch.setattr(zulip_listener, "run_front", front_run)
     guides = tmp_path / "guides"
-    (guides / "argue").mkdir(parents=True)
+    (guides / "argue").mkdir(parents=True, exist_ok=True)
     (guides / "argue" / "guide.md").write_text("ARGUE GUIDE")
     monkeypatch.setattr(zulip_listener, "GUIDES", guides)
 
@@ -170,3 +179,121 @@ def test_an_argue_prefix_outside_the_argue_channel_is_left_alone(monkeypatch, tm
     wire(monkeypatch, tmp_path, calls)
     argue_module.handle_argue(Client(calls, [message(id=92)]), "general", TOPIC)
     assert calls == []
+
+
+# --- completion (step 3) --------------------------------------------------------------
+
+
+class Realm(Client):
+    """A client whose realm holds a project channel in a chosen state."""
+
+    def __init__(self, calls, history, *, channels=(), topics=(), setup_answered=False, goal=True):
+        super().__init__(calls, history)
+        self.names = list(channels)
+        self.topic_names = list(topics)
+        self.setup_answered = setup_answered
+        self.goal = goal
+
+    def channels(self, include_archived=False):
+        return [{"name": n, "stream_id": 400 + i} for i, n in enumerate(self.names)]
+
+    def channel_topics(self, stream_id):
+        return list(self.topic_names)
+
+    def topic_last_id(self, channel, topic):
+        return 1 if (topic == "goal" and self.goal) else 0
+
+    def topic_history(self, channel, topic, num_before):
+        if channel == agents_md.AGENTS_CHANNEL:
+            return super().topic_history(channel, topic, num_before)
+        if topic.startswith("workplan-setup-"):
+            rows = [message(sender_id=BOT_ID, name="Front", content="please set up", id=10)]
+            if self.setup_answered:
+                rows.append(message(sender_id=OTHER_BOT, name="autolab", content="done: main/ exists", id=11))
+            return rows
+        return super().topic_history(channel, topic, num_before)
+
+
+def argue_history():
+    return [message(sender_id=BOT_ID, name="Front", content=argue_note(Conversation("front", "front-a")), id=90),
+            message(content="I want a self-running aquarium factory.", id=92),
+            message(sender_id=BOT_ID, name="Front", content=desire_note(92, HUMAN_ID), id=93),
+            message(content="go ahead with the project", id=94)]
+
+
+def outcome_answer(kind, target="pj-aquafactory"):
+    return f"Outcome: …\n\n```ag-argue\noutcome: {kind}\ntarget: {target}\ncomplete: true\n```"
+
+
+def test_a_project_completes_only_when_channel_goal_and_workspace_answer_exist(monkeypatch, tmp_path):
+    calls = []
+    wire(monkeypatch, tmp_path, calls, answer=outcome_answer("project"))
+    client = Realm(calls, argue_history(), channels=("pj-aquafactory",), setup_answered=True)
+    argue_module.handle_argue(client, CHANNEL, TOPIC)
+    assert ("post", CHANNEL, TOPIC, "[selfnote][outcome] project pj-aquafactory") in posts(calls)
+    origin = [p for p in posts(calls) if p[1] == "front"]
+    assert origin and "has finished: project in #pj-aquafactory" in origin[0][3]
+    assert any(c[0] == "resolve" for c in calls)  # resolved by serve_topic after the reply
+    reply = replies(calls)[-1][3]
+    assert "is complete (project in #pj-aquafactory)" in reply and "```" not in reply
+
+
+def test_a_project_without_the_workspace_answer_is_not_complete(monkeypatch, tmp_path):
+    calls = []
+    wire(monkeypatch, tmp_path, calls, answer=outcome_answer("project"))
+    client = Realm(calls, argue_history(), channels=("pj-aquafactory",), setup_answered=False)
+    argue_module.handle_argue(client, CHANNEL, TOPIC)
+    assert not any("[selfnote][outcome]" in p[3] for p in posts(calls))
+    assert "not complete" in replies(calls)[-1][3] and "no answer yet" in replies(calls)[-1][3]
+
+
+def test_a_missing_channel_or_document_is_named(monkeypatch, tmp_path):
+    calls = []
+    wire(monkeypatch, tmp_path, calls, answer=outcome_answer("plan", "pj-studyrealworld"))
+    argue_module.handle_argue(Realm(calls, argue_history()), CHANNEL, TOPIC)
+    assert "does not exist" in replies(calls)[-1][3]
+    calls = []
+    wire(monkeypatch, tmp_path, calls, answer=outcome_answer("plan", "pj-studyrealworld"))
+    argue_module.handle_argue(Realm(calls, argue_history(), channels=("pj-studyrealworld",), topics=("guide",)), CHANNEL, TOPIC)
+    assert "researchplan-" in replies(calls)[-1][3]
+
+
+def test_a_plan_in_an_existing_study_completes_without_a_workspace_answer(monkeypatch, tmp_path):
+    calls = []
+    wire(monkeypatch, tmp_path, calls, answer=outcome_answer("plan", "pj-studyrealworld"))
+    client = Realm(calls, argue_history(), channels=("pj-studyrealworld",), topics=("researchplan-closed-loop", "guide"))
+    argue_module.handle_argue(client, CHANNEL, TOPIC)
+    assert ("post", CHANNEL, TOPIC, "[selfnote][outcome] plan pj-studyrealworld") in posts(calls)
+
+
+def test_a_new_study_needs_its_plan_topic_and_the_workspace_answer(monkeypatch, tmp_path):
+    calls = []
+    wire(monkeypatch, tmp_path, calls, answer=outcome_answer("study", "pj-aquaculture"))
+    client = Realm(calls, argue_history(), channels=("pj-aquaculture",), topics=("researchplan-aquaculture",), setup_answered=True)
+    argue_module.handle_argue(client, CHANNEL, TOPIC)
+    assert ("post", CHANNEL, TOPIC, "[selfnote][outcome] study pj-aquaculture") in posts(calls)
+
+
+def test_completion_needs_a_recorded_desire(monkeypatch, tmp_path):
+    calls = []
+    wire(monkeypatch, tmp_path, calls, answer=outcome_answer("project"))
+    history = [message(sender_id=BOT_ID, name="Front", content=argue_note(None), id=90), message(content="hi", id=92)]
+    argue_module.handle_argue(Realm(calls, history, channels=("pj-aquafactory",), setup_answered=True), CHANNEL, TOPIC)
+    assert "no desire is on record" in replies(calls)[-1][3]
+    assert not any("[selfnote][outcome]" in p[3] for p in posts(calls))
+
+
+def test_a_callback_into_an_argue_home_is_served_by_the_argue_role(monkeypatch, tmp_path):
+    calls = []
+    wire(monkeypatch, tmp_path, calls, answer="autolab says the workspace exists.")
+    client = Realm(calls, argue_history())
+    monkeypatch.setattr(zulip_listener, "rootchat_home", lambda c, ch, t, s: Conversation(CHANNEL, TOPIC))
+    monkeypatch.setattr(zulip_listener, "live_topic_name", lambda c, ch, t: t)
+    monkeypatch.setattr(zulip_listener, "note_served", lambda *a, **k: 11)
+    monkeypatch.setattr(zulip_listener, "start_opened_runs", lambda *a, **k: None)
+    zulip_listener.handle_mention(client, "pj-aquafactory", "workplan-setup-aquafactory")
+    (run,) = runs(calls)
+    assert run[4] == "argue" and run[3] == (CHANNEL, TOPIC)
+    assert "threads/pj-aquafactory/workplan-setup-aquafactory.md" in run[1]
+    # Home is Front's own topic, so the ack is fine there; the reply carries no mention.
+    assert [r[3] for r in replies(calls)] == [zulip_listener.ACK_TEXT, "autolab says the workspace exists."]

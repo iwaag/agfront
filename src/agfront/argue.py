@@ -21,6 +21,14 @@ What is Front's own here, and pinned by `tests/test_argue.py`:
   writes `[selfnote][argue]` first; a human who simply posts under a new
   `argue-` name gets the note written by the first serving, so the argue has
   an identity either way.
+- **Completion is checked, not believed** (step 3). The run says what the
+  argue ended in — `outcome: project|study|plan`, `target: pj-<slug>`,
+  `complete: true` — and the listener reads the realm: the channel exists,
+  the goal or research-plan topic holds a post, and for a project or a new
+  study the workspace request has been answered. Only then is
+  `[selfnote][outcome]` written, the origin conversation told, and the
+  argue resolved. A resolve ends the discussion's dispatch and nothing
+  else: the project or study it created stays open.
 """
 
 from __future__ import annotations
@@ -43,6 +51,7 @@ from agag.argue import (
 )
 from agag.entrance import EMPTY_REPLY
 from agag.intro import write_agents_md
+from agag.selfnote import Conversation, is_speech, note
 from agag.topics import (
     HISTORY_MESSAGES,
     TopicResult,
@@ -53,16 +62,21 @@ from agag.topics import (
     next_generation,
     prompt_with_guide,
     serve_topic,
+    threads_placement,
     topic_workspace,
 )
-from agag.zulip import ZulipClient, log
+from agag.zulip import RESOLVED_TOPIC_PREFIX, ZulipClient, live_topic_name, log, remotes_for_home
 
 from . import zulip_listener as front
-from .evidence import format_evidence
+from .evidence import format_evidence, write_evidence_threads
+from .project import GOAL_TOPIC, PLAN_TOPIC_PREFIX, PROJECT_CHANNEL_PREFIX, SETUP_TOPIC_PREFIX
 
 ARGUE_ROLE = "argue"
+OUTCOME_TAG = "outcome"
+OUTCOMES = ("project", "study", "plan")
 
-__all__ = ["ARGUE_ROLE", "anchor_placement", "argue_prompt", "handle_argue", "humans_of", "serve_argue"]
+__all__ = ["ARGUE_ROLE", "OUTCOMES", "OUTCOME_TAG", "anchor_placement", "argue_prompt", "handle_argue", "humans_of",
+           "outcome_note", "serve_argue", "verify_outcome"]
 
 
 def anchor_placement(anchor: Anchor | None) -> str:
@@ -73,8 +87,11 @@ def anchor_placement(anchor: Anchor | None) -> str:
 
 
 def argue_prompt(bot_name: str, conversation: str, anchor: Anchor | None, desire: Desire | None,
-                 history: list[dict]) -> str:
-    lines = [chatlog_placement(bot_name), anchor_placement(anchor), desire_placement(desire, history), "", conversation]
+                 history: list[dict], *, threads=(), workspace: Path | None = None) -> str:
+    lines = [chatlog_placement(bot_name), anchor_placement(anchor), desire_placement(desire, history)]
+    if placement := threads_placement(threads, workspace or Path(".")):
+        lines.append(placement)
+    lines += ["", conversation]
     return prompt_with_guide(lines, front.guide(ARGUE_ROLE, "guide.md"))
 
 
@@ -99,12 +116,19 @@ def serve_argue(context) -> TopicResult:
                               drop=is_ack, bounded=len(context.history) >= HISTORY_MESSAGES,
                               history_messages=HISTORY_MESSAGES)
     chatlog_path(workspace).write_text(chatlog, encoding="utf-8")
+    context.step = "threads"
+    remotes = [c.as_pair() for c in remotes_for_home(context.client, context.channel, context.topic)]
+    for pair in getattr(context, "extra_threads", ()):
+        if pair not in remotes:
+            remotes.append(pair)
+    threads = write_evidence_threads(context.client, workspace, remotes, context.self_id, drop=is_ack)
     context.step = "harvest"
     write_agents_md(context.client, workspace)
 
     context.step = ARGUE_ROLE
     output = front.run_front(
-        argue_prompt(context.bot_name, conversation_context(chatlog), anchor, desire, context.history),
+        argue_prompt(context.bot_name, conversation_context(chatlog), anchor, desire, context.history,
+                     threads=threads, workspace=workspace),
         workspace, (context.channel, context.topic), ARGUE_ROLE,
         extra_meta={"argue": anchor.message_id} if anchor else None,
         selection=context.selection,
@@ -117,10 +141,79 @@ def serve_argue(context) -> TopicResult:
         notes.append(f"(your {'ag-argue'} block was not readable: {error})")
     if fields and fields.get("desire"):
         notes.append(record_desire(context, fields["desire"], desire))
+    finished = False
     if fields and fields.get("complete", "").lower() == "true":
-        log(f"argue {context.channel!r}/{context.topic!r} says it is complete; completion is outside step 1")
+        context.step = "outcome"
+        finished, line = complete(context, fields, anchor, desire)
+        notes.append(line)
     body = "\n\n".join(part for part in [text, *notes] if part)
-    return TopicResult([body or EMPTY_REPLY])
+    return TopicResult([body or EMPTY_REPLY], resolve_after=finished)
+
+
+def outcome_note(kind: str, target: str) -> str:
+    return note(OUTCOME_TAG, f"{kind} {target}")
+
+
+def verify_outcome(client: ZulipClient, kind: str, target: str) -> str | None:
+    """Why the claimed outcome is not yet there, or None when it is.
+
+    Read from the realm, never from the reply: the channel, the document
+    topic, and — for a project or a new study — autolab's answer to the
+    workspace request, which is the only evidence this run has that the
+    folder exists.
+    """
+    if kind not in OUTCOMES:
+        return f"outcome must be one of {', '.join(OUTCOMES)}, not {kind!r}"
+    if not target.startswith(PROJECT_CHANNEL_PREFIX):
+        return f"target must be a project channel (pj-…), not {target!r}"
+    slug = target[len(PROJECT_CHANNEL_PREFIX):]
+    row = next((r for r in client.channels() if r.get("name") == target), None)
+    if row is None:
+        return f"#{target} does not exist"
+    if kind == "project":
+        if not client.topic_last_id(target, GOAL_TOPIC):
+            return f"#{target} has no `{GOAL_TOPIC}` topic yet"
+    else:
+        names = client.channel_topics(int(row["stream_id"]))
+        if not any(n.startswith(PLAN_TOPIC_PREFIX) or n.startswith(f"{RESOLVED_TOPIC_PREFIX}{PLAN_TOPIC_PREFIX}") for n in names):
+            return f"#{target} has no `{PLAN_TOPIC_PREFIX}…` topic yet"
+    if kind in ("project", "study"):
+        setup = f"{SETUP_TOPIC_PREFIX}{slug}"
+        history = client.topic_history(target, setup, num_before=50) or client.topic_history(
+            target, f"{RESOLVED_TOPIC_PREFIX}{setup}", num_before=50)
+        self_id = int(client.whoami()["user_id"])
+        if not history:
+            return f"#{target} › {setup} does not exist: the workspace has not been asked for"
+        if not any(m.get("sender_id") != self_id and is_speech(m) and not is_ack(str(m.get("content", ""))) for m in history):
+            return f"#{target} › {setup} has no answer yet: the workspace is not known to exist"
+    return None
+
+
+def complete(context, fields: dict[str, str], anchor: Anchor | None, desire: Desire | None) -> tuple[bool, str]:
+    """Check the claimed outcome; on success record it, tell the origin and
+    say the argue is being resolved."""
+    kind = (fields.get("outcome") or "").strip().lower()
+    target = (fields.get("target") or "").strip().lstrip("#")
+    if desire is None:
+        return False, "(not complete: no desire is on record, so there is nothing this argue has planned for)"
+    why = verify_outcome(context.client, kind, target)
+    if why is not None:
+        log(f"refused completion of {context.channel!r}/{context.topic!r}: {why}")
+        return False, f"(not complete: {why})"
+    context.client.send_to_channel(context.channel, context.topic, outcome_note(kind, target))
+    if anchor is not None and anchor.origin is not None:
+        try:
+            origin = anchor.origin
+            live = live_topic_name(context.client, origin.channel, origin.topic)
+            context.client.send_to_channel(
+                origin.channel, live,
+                f"The argue **#{context.channel} › {context.topic}** has finished: {kind} in #{target}. "
+                f"Its outcome is the last post there.",
+            )
+        except Exception as error:  # noqa: BLE001 - the outcome stands without the courtesy line
+            log(f"could not tell the origin {anchor.origin}: {error!r}")
+    log(f"argue {context.channel!r}/{context.topic!r} complete: {kind} in #{target}")
+    return True, f"— this argue is complete ({kind} in #{target}) and is being resolved; #{target} stays open."
 
 
 def record_desire(context, value: str, existing: Desire | None) -> str:
