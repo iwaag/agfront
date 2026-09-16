@@ -568,17 +568,20 @@ def test_the_listener_is_the_skeleton_with_one_route_and_the_mention_route(monke
     )
     listener.main()
     assert handed["spec"] is zulip_listener.SPEC
+    from agfront.argue import handle_argue
+
     assert handed["routes"] == {"front-": zulip_listener.handle_topic,
-                                "routinerun-": zulip_listener.handle_topic}
+                                "routinerun-": zulip_listener.handle_topic,
+                                "argue-": handle_argue}
     assert handed["on_mention"] is zulip_listener.handle_mention
     # Run recovery is the listener's recovery hook: it runs after the startup
     # recovery and after every resync, off the mirror (`better_zulip_call`
     # p1 step 5) — not once before the loop against Zulip.
     assert handed["on_recover"] is zulip_listener.recover_runs
-    # `front-` and its own `routinerun-` are the only prefixes swept: Front
-    # never answers the topics it opens in other agents' channels, by filter
-    # and not by luck.
-    assert zulip_listener.SPEC.sweep_prefixes == ("front-", "routinerun-")
+    # `front-`, its own `routinerun-` and the argues it facilitates are the
+    # only prefixes swept: Front never answers the topics it opens in other
+    # agents' channels, by filter and not by luck.
+    assert zulip_listener.SPEC.sweep_prefixes == ("front-", "routinerun-", "argue-")
 
 
 # --- the Front Desk: characters and evidence (front_desk p2 step 2) ---------
@@ -944,11 +947,11 @@ def test_every_covered_role_is_a_role_front_has_configured():
         assert role in config["roles"], role
 
 
-def test_the_covered_roles_are_the_three_the_sentence_names():
-    # `COVERS` says "this entrance, the Front Desk and routine runs", and the
-    # pool is derived from exactly those. A sentence and a pool about
+def test_the_covered_roles_are_the_four_the_sentence_names():
+    # `COVERS` says "this entrance, the Front Desk, routine runs and argues",
+    # and the pool is derived from exactly those. A sentence and a pool about
     # different work is the failure this pairing exists to prevent.
-    assert front_instance.SPEC.exec_roles == ("front", "character_talk", "routine_run")
+    assert front_instance.SPEC.exec_roles == ("front", "character_talk", "routine_run", "argue")
 
 
 def test_a_role_moved_in_the_overlay_moves_the_derived_default():

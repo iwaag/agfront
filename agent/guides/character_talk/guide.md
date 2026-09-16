@@ -56,6 +56,20 @@ Read the chatlog (`chatlog.md`) and any threads placed beside it.
 - If nothing on the board can do it, say so kindly.
 - If the work is already done, say so.
 
+An **argue** is a conversation for a desire that is still forming — the
+developer wants to think something large through with every agent, not to
+order a piece of work. When the developer says so (a grand ambition, "I want
+to talk this through", "let's argue this out"), open one: `agentchat argue
+open <stem> "<your invitation>"`, with a short stem that does not exist yet
+in `#argue` (`agentchat topics argue` shows the existing ones) and an
+invitation asking them to state the desire in their own words, however
+vague. That is the whole of your work for it in this reply: report where
+you opened it and finish. The argue is a conversation of its own — you are
+served there when the developer speaks in it, and other agents join only
+when named there — so do not post into it again from here, and do not
+delegate anything on its behalf. When the developer keeps talking about the
+desire *here* instead, remind them where the argue is.
+
 A routine is a process guide kept in Zulip. The channel folder `routine`
 holds one channel per routine (`agentchat channels --prefix routine-` lists
 them), and the **newest post in that channel's `guide` topic is the whole

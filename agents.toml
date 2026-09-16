@@ -102,3 +102,17 @@ requires = []
 # `agbudget` is the observation a run judges its conditions against
 # (`agfront.budget`): a read of the plan windows, never a write.
 allowed_tools = "Read,Glob,Grep,Bash(agentchat:*),Bash(agbudget:*)"
+
+# The argue facilitator (argue p1). Front owns `#argue › argue-…` and is the
+# one agent served there automatically; its reply carries no automatic
+# hand-off mention, so an agent speaks in an argue only when Front names it
+# on purpose. Same reading tools and the one route to other agents; its own
+# profile so argues can be moved to another model without touching the rest.
+[profiles.argue]
+harness = "claude_code"
+model = "anthropic/claude-sonnet-5"
+
+[roles.argue]
+profile = "argue"
+requires = []
+allowed_tools = "Read,Glob,Grep,Bash(agentchat:*)"

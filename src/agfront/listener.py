@@ -19,10 +19,14 @@ never `front-`.
 from __future__ import annotations
 
 from agag.agent import listener_main
-from .instance import FRONT_TOPIC_PREFIX, ROUTINE_RUN_PREFIX, SPEC
+from .argue import handle_argue
+from .instance import ARGUE_TOPIC_PREFIX, FRONT_TOPIC_PREFIX, ROUTINE_RUN_PREFIX, SPEC
 from .zulip_listener import handle_mention, handle_topic, recover_runs
 
-ROUTES = {FRONT_TOPIC_PREFIX: handle_topic, ROUTINE_RUN_PREFIX: handle_topic}
+#: `argue-` (argue p1) is the third thing Front owns: a conversation in
+#: `#argue` it facilitates, served without the hand-off mention every other
+#: reply carries, so that an agent speaks there only when Front names it.
+ROUTES = {FRONT_TOPIC_PREFIX: handle_topic, ROUTINE_RUN_PREFIX: handle_topic, ARGUE_TOPIC_PREFIX: handle_argue}
 
 
 def main() -> None:

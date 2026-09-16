@@ -20,6 +20,20 @@ posted back into the conversation that asked. `routinerun-` is its own
 topic, swept in the routine channels. There is no schedule; a run happens
 when somebody asks for it.
 
+Since `argue` p1 it **facilitates argues**: a conversation in `#argue`
+(`argue-<stem>`) where a human develops a desire that is still forming,
+with every agent in this system. Front opens one from an ordinary
+conversation (`agentchat argue open`), asks until a human has stated the
+desire in their own post, and then invites the agents whose knowledge or
+capability would help, by naming them there. It is the only agent served
+automatically in an argue; **everybody else is served only when named** in
+it, and answers in the same topic. A mention there is a deliberate request
+for a contribution and costs that agent a run, so Front names nobody out of
+habit and its replies carry no hand-off mention. Nobody has to know Front's
+vocabulary to take part: the common participation guide travels with
+`pyagag` (`agag.argue`), and an agent that wants to answer in argues wires
+its mention route to it.
+
 Since `runtime-profile` it can be asked **how** to execute. Its own execution
 options are listed below; a request that another agent do *its* work a
 particular way is a different thing, settled in that agent's own topic, and

@@ -25,6 +25,7 @@ import tomllib
 from pathlib import Path
 
 from agag.agent import AgentSpec
+from agag.argue import ARGUE_TOPIC_PREFIX
 from agag.execopt import Option
 
 AGFRONT_ROOT = Path(__file__).resolve().parents[2]
@@ -47,12 +48,12 @@ PUBLIC_PROFILES = (
 )
 #: Front's roles are its entrance, the Front Desk voice and a routine run, and
 #: an option applies to all three: the conversation is what carries it.
-COVERS = "my own conversations: this entrance, the Front Desk and routine runs"
+COVERS = "my own conversations: this entrance, the Front Desk, routine runs and argues"
 #: The roles `COVERS` is a sentence about, and the roles the published pool is
 #: **derived** from (`agag.execpool`). The two must name the same work: a
 #: sentence and a pool that disagree is precisely the failure this list
 #: exists to make impossible.
-EXEC_ROLES = ("front", "character_talk", "routine_run")
+EXEC_ROLES = ("front", "character_talk", "routine_run", "argue")
 #: What running under no selection costs. Published because a threshold like
 #: "until the pool is 70 % used" cannot be judged against a default that
 #: declines to name a pool.
@@ -96,13 +97,15 @@ def exec_options(path: Path | None = None) -> tuple[Option, ...]:
 
 SPEC = AgentSpec(
     "front", AGFRONT_ROOT, plan_prefix=FRONT_TOPIC_PREFIX,
-    extra_prefixes=(ROUTINE_RUN_PREFIX,),
+    # `argue-` (argue p1): a conversation in `#argue` Front owns and
+    # facilitates; every other agent takes part there only when named.
+    extra_prefixes=(ROUTINE_RUN_PREFIX, ARGUE_TOPIC_PREFIX),
     exec_options=exec_options(),
     exec_roles=EXEC_ROLES,
 )
 
 __all__ = [
-    "AGFRONT_ROOT", "COVERS", "DEFAULT_OPTION_DETAIL", "FRONT_TOPIC_PREFIX",
+    "AGFRONT_ROOT", "ARGUE_TOPIC_PREFIX", "COVERS", "DEFAULT_OPTION_DETAIL", "FRONT_TOPIC_PREFIX",
     "PUBLIC_PROFILES", "ROUTINE_RUN_PREFIX", "SPEC",
     "configured_profiles", "exec_options",
 ]
