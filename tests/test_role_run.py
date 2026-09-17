@@ -32,15 +32,15 @@ def test_front_s_grant_is_reading_plus_agentchat():
     assert "Write" not in grant
 
 
-def test_character_talk_has_front_s_grant_and_a_profile_of_its_own():
+def test_desk_has_front_s_grant_and_a_profile_of_its_own():
     """The Front Desk voice reads, and reaches other agents through the one
     command, exactly as front does; its profile is separate so the voice can
     move harness or model without moving the entrance (front_desk p1)."""
     config, overlay = load_config(SPEC.agents_config, Path("/nonexistent"))
     front = resolve_role(config, overlay, "front", check_available=False)
-    desk = resolve_role(config, overlay, "character_talk", check_available=False)
+    desk = resolve_role(config, overlay, "desk", check_available=False)
     assert desk.allowed_tools == front.allowed_tools
-    assert desk.profile == "character_talk"
+    assert desk.profile == "desk"
     assert desk.profile != front.profile
 
 

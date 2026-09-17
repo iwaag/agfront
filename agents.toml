@@ -73,19 +73,34 @@ profile = "sonnet"
 requires = []
 allowed_tools = "Read,Glob,Grep,Bash(agentchat:*)"
 
-# The Front Desk voice (front_desk p1). The same reading tools and the same
-# one route to other agents as `front`; what differs is the guide the
-# listener pairs with it (`agent/guides/character_talk/guide.md`) and that its
-# profile is its own, so the Front Desk can be moved to another harness or
-# model without touching the ordinary entrance. It starts on front's model.
-[profiles.character_talk]
+# The Front Desk (front_desk p1; `desk` since argue p2). The same reading
+# tools and the same one route to other agents as `front`; what differs is
+# the guide the listener pairs with it (`agent/guides/desk/guide.md`) and that
+# its profile is its own, so the Front Desk can be moved to another harness or
+# model without touching the ordinary entrance. It is given no character: the
+# scene the screen plays is made afterwards by `present`.
+[profiles.desk]
 harness = "claude_code"
 model = "anthropic/claude-sonnet-5"
 
-[roles.character_talk]
-profile = "character_talk"
+[roles.desk]
+profile = "desk"
 requires = []
 allowed_tools = "Read,Glob,Grep,Bash(agentchat:*)"
+
+# The presentation role (argue p2): recorded speech in, character dialogue
+# out (`agfront.present`). Its whole input is in its prompt and beside it as
+# files; it has no `agentchat`, no shell and nothing to write with, so it can
+# neither delegate nor speak in a discussion. Its own profile, so rendering
+# can be moved to a cheaper model without touching any discussion role.
+[profiles.present]
+harness = "claude_code"
+model = "anthropic/claude-sonnet-5"
+
+[roles.present]
+profile = "present"
+requires = []
+allowed_tools = "Read,Glob,Grep"
 
 # A routine run (refine_routine p1). The same tools as `front`; the guide the
 # listener pairs with it (`agent/guides/routine_run/guide.md`) is what makes

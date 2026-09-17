@@ -39,31 +39,26 @@ developer") is true. Anything Front wants to say to the other agent is a
 deliberate `agentchat send`, never a reply by reflex.
 
 **Since `front_desk` p1 a conversation chooses its role.** A `front-desk-…`
-topic — the graphic-novel screen in agdevworld — is served by the
-`character_talk` role with its own guide and profile; every other `front-*`
-topic is served by `front` as before. The choice is made from the **home**
-conversation, so a callback into a Front Desk conversation is answered in the
-same voice the conversation was opened in. Nothing else differs: same files,
-same `agentchat`, same reply-at-home.
+topic — the graphic-novel screen in agdevworld — is served by the `desk`
+role with its own guide and profile; every other `front-*` topic is served
+by `front` as before. The choice is made from the **home** conversation, so
+a callback into a Front Desk conversation is served the way the conversation
+was opened. Its chatlog and threads are rendered by `agfront.evidence`
+rather than the shared `format_chatlog`: same conversations, with the message
+ids, sender ids and topic names kept, so a report can cite the post it came
+from; a bounded or unreadable thread says so in the file.
 
-**Since `front_desk` p2 a Front Desk run is given its characters and its
-evidence.** The character definition is no longer in the guide: the settings
-repository agdevworld syncs (`agfront.settings`) is pinned to one revision at
-the start of the serving and copied into the workspace as `characters.md` —
-every character's whole lore, and which agents speak as which — so a sync
-that lands mid-run changes the next run, not this one. The chatlog and the
-threads of that run are rendered by `agfront.evidence` rather than the shared
-`format_chatlog`: same conversations, with the message ids, sender ids and
-topic names kept, so a line given to another character can cite the post it
-came from; a bounded or unreadable thread says so in the file. The pinned
-revision is stamped into the run record.
-
-**Since `front_desk` p2 step 3 a Front Desk reply may carry a dialogue.**
-The run ends its reply with a fenced `ag-dialogue` JSON block — a few turns
-by the characters of the pinned revision, the other agents' lines drawn from
-the threads — and `agfront.dialogue` validates and re-serializes it before
-the post, stamping the revision. An unusable block becomes an
-`ag-dialogue-error` fence after the reply, never a re-run.
+**Since `argue` p2 no discussion run is given a character.** Until then a
+Front Desk run (`character_talk`) was handed every character's lore and
+ended its reply with an `ag-dialogue` block, so the run that judged,
+delegated and reported also role-played — and whatever the lore said sat in
+the context of every decision. The desk run now gets no `characters.md`, no
+settings revision and no dialogue contract: its reply is the substantive
+record and is posted as written. The character dialogue is made afterwards
+by Front's **presentation** role from the recorded speech, on a worker of
+its own, and saved to a memo topic nobody reacts to (`agfront.present`,
+`agfront.render`, `agag.memo`). A rendering that fails or is slow costs the
+conversation nothing.
 
 **Since `routine_tests` p2 ex1 the conversation is in the prompt.** It used
 to be only `chatlog.md` — a file the run had to decide to open — and a reply
@@ -84,7 +79,6 @@ the mark.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from agag.agent import SWEEP_ACK as ACK_TEXT, exec_options_for, is_ack, run_role
@@ -121,7 +115,6 @@ from agag.zulip import (
 )
 
 from .budget import write_budget_doc
-from .dialogue import finish_reply
 from .evidence import format_evidence, write_evidence_threads
 from .instance import SPEC
 from .routine import (
@@ -138,13 +131,12 @@ from .routine import (
     split_finish,
     unstarted,
 )
-from .settings import SettingsUnavailable, characters_markdown, pin
 
 
 #: The Front Desk's conversations: `#front` › `front-desk-<id>`. Inside the
 #: `front-` sweep, so no listener change routes them; only the role differs.
 FRONT_DESK_PREFIX = "front-desk-"
-CHARACTER_ROLE = "character_talk"
+DESK_ROLE = "desk"
 FRONT_ROLE = "front"
 
 # The skeleton's paths, named here so a test can point a serving elsewhere.
@@ -174,15 +166,14 @@ FRONT_TIMEOUT_SECONDS = 360
 CONTINUATION_DEPTH = 8
 
 __all__ = [
-    "CHARACTER_ROLE",
     "CONTINUATION_DEPTH",
+    "DESK_ROLE",
     "FRONT_DESK_PREFIX",
     "FRONT_ROLE",
     "ROUTINE_ROLE",
     "SPEC",
     "ZULIP_ENV",
     "ListenerError",
-    "characters_placement",
     "continue_deliveries",
     "front_prompt",
     "guide",
@@ -206,43 +197,30 @@ def guide(*parts: str) -> str:
 
 
 def role_for(channel: str, topic: str) -> str:
-    """Which role serves this conversation: the Front Desk voice for a
-    `front-desk-…` topic, the ordinary front for every other `front-*` one.
+    """Which role serves this conversation: `desk` for a `front-desk-…`
+    topic, the ordinary front for every other `front-*` one.
 
     Decided from the conversation being served — the *home* — never from the
-    topic a mention arrived in, so a callback keeps the voice of the
-    conversation it belongs to.
+    topic a mention arrived in, so a callback is served the way the
+    conversation it belongs to is.
     """
     del channel  # the prefix is the whole rule; `#front` is where the sweep looks
     if is_run_topic(topic):
         return ROUTINE_ROLE
-    return CHARACTER_ROLE if topic.startswith(FRONT_DESK_PREFIX) else FRONT_ROLE
-
-
-def characters_placement(revision: str | None, reason: str | None = None) -> str:
-    """One line saying where the characters are — or that they are not.
-
-    A run without settings is told so in the placement rather than handed a
-    guide that presumes a file: the guide then says what to do in that case.
-    """
-    if revision:
-        return (f"The characters are placed beside it in \"characters.md\" "
-                f"(settings revision {revision}); the section marked as you is who you are.")
-    return f"No character settings are available for this run ({reason or 'unknown reason'})."
+    return DESK_ROLE if topic.startswith(FRONT_DESK_PREFIX) else FRONT_ROLE
 
 
 def front_prompt(
     bot_name: str, threads=(), root: Path | None = None, role: str = FRONT_ROLE,
-    *, characters: str | None = None, conversation: str = "",
+    *, conversation: str = "",
 ) -> str:
     """The conversation, the placement lines, then the role's guide.
 
     Placement says where the files are; the guide says what to produce. The
     threads line only appears when there are threads, so a first request
     never carries a sentence about files that are not there. The guide is the
-    role's own (`agent/guides/<role>/guide.md`): the voice is defined there,
-    not by the role's name. `characters` is the Front Desk's placement line
-    for `characters.md`, present only for that role.
+    role's own (`agent/guides/<role>/guide.md`). No role is given a character
+    (`argue` p2): how a conversation is *shown* is made elsewhere, afterwards.
 
     `conversation` is the rendered chatlog of *this* serving — the same bytes
     written to `chatlog.md`, carried in the prompt by
@@ -256,8 +234,6 @@ def front_prompt(
     lines = [chatlog_placement(bot_name)]
     if placement := threads_placement(threads, root or Path(".")):
         lines.append(placement)
-    if characters:
-        lines.append(characters)
     if conversation:
         lines.append("")
         lines.append(conversation)
@@ -274,7 +250,7 @@ def run_front(
     posts elsewhere is recorded against it, so the answer comes back here.
     The record is filed under the role, so a Front Desk run is told apart
     from an ordinary front run by where its record is. `extra_meta` is
-    stamped into the record — the settings revision a Front Desk run drew on.
+    stamped into the record.
     """
     record = next_record_path(RECORDS_ROOT / role)
     output, _, exit_code = run_role(
@@ -299,40 +275,17 @@ def serve(context) -> TopicResult:
     Three kinds of file now: the conversation being served (`chatlog.md`),
     the conversations Front has taken part in elsewhere (`threads/`), and the
     board (`tools/agents.md`). One of the threads is usually why this run is
-    happening at all. A Front Desk serving gets a fourth, `characters.md`,
-    and its chatlog and threads keep their message ids (`agfront.evidence`).
+    happening at all. A Front Desk serving's chatlog and threads keep their
+    message ids (`agfront.evidence`); it is given no character (`argue` p2).
     """
     role = role_for(context.channel, context.topic)
-    desk = role == CHARACTER_ROLE
+    desk = role == DESK_ROLE
     run = role == ROUTINE_ROLE
     # A run's chatlog is its own record and its threads are its evidence:
     # both keep their message ids, like the Front Desk's.
     evidence = desk or run
     number = next_generation(topic_workspace(TOPICS_ROOT, context.channel, context.topic))
     front_dir = generation_dir(TOPICS_ROOT, context.channel, context.topic, number, role)
-
-    settings = None
-    settings_note = None
-    if desk:
-        # Pinned before anything else is written, so every file of this
-        # serving is of one revision.
-        context.step = "settings"
-        try:
-            settings = pin()
-        except SettingsUnavailable as error:
-            settings_note = str(error)
-            log(f"character settings unavailable: {error}")
-        else:
-            (front_dir / "characters.md").write_text(characters_markdown(settings), encoding="utf-8")
-            (front_dir / "settings.json").write_text(
-                json.dumps({"schema": "ag.frontdesk-settings.v1", "revision": settings.revision,
-                            "root": str(settings.root),
-                            "characters": {c.id: {"name": c.name, "nickname": c.nickname,
-                                                  "agents": list(c.agents)}
-                                           for c in settings.characters.values()}},
-                           ensure_ascii=False, indent=2) + "\n",
-                encoding="utf-8",
-            )
 
     context.step = "chatlog"
     # Rendered once. The same bytes are the file and the prompt's copy, so a
@@ -374,16 +327,10 @@ def serve(context) -> TopicResult:
 
     context.step = role
     output = run_front(
-        front_prompt(
-            context.bot_name, threads, front_dir, role,
-            characters=(characters_placement(settings.revision if settings else None, settings_note)
-                        if desk else None),
-            conversation=conversation_context(chatlog),
-        ),
+        front_prompt(context.bot_name, threads, front_dir, role, conversation=conversation_context(chatlog)),
         front_dir,
         (context.channel, context.topic),
         role,
-        extra_meta={"settings_revision": settings.revision} if settings else None,
         # Front's own execution option, frozen for this serving. Asking
         # another agent to run *its* work a certain way is a different
         # decision, made in that agent's own topic (`agentchat use`).
@@ -391,17 +338,9 @@ def serve(context) -> TopicResult:
     )
     if run:
         return finish_run(context, output)
-    if not desk:
-        return TopicResult([output])
-    # The Front Desk's post is the reply plus, when the run wrote one, its
-    # dialogue block — validated against the pinned revision and
-    # re-serialized here, so the screen never parses what a run improvised.
-    context.step = "dialogue"
-    text, dialogue, error = finish_reply(output, settings, workspace=front_dir, log=log)
-    if dialogue is not None:
-        log(f"dialogue: {len(dialogue.turns)} turns by {', '.join(dialogue.characters)} "
-            f"at settings {dialogue.settings_revision[:12]}")
-    return TopicResult([text])
+    # A desk reply is posted as written, like any other: the scene the screen
+    # plays is rendered from it afterwards (`agfront.render`), never by this run.
+    return TopicResult([output])
 
 
 def finish_run(context, output: str) -> TopicResult:

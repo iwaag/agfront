@@ -38,7 +38,7 @@ ROUTINE_RUN_PREFIX = "routinerun-"
 #: What Front is willing to be asked for: `(profile name, usage pool, phrase)`.
 #: The profile name is the public name — one-to-one, the contract's suggested
 #: start — and `exec_options` publishes one only if `agents.toml` has it.
-#: `sonnet`, `character_talk` and `routine_run` stay private: they are how
+#: `sonnet`, `desk`, `present` and `routine_run` stay private: they are how
 #: Front is wired, not a choice anybody outside makes.
 PUBLIC_PROFILES = (
     ("agy", "antigravity", "Antigravity CLI (`agy`), Gemini 3.8 Flash"),
@@ -53,7 +53,7 @@ COVERS = "my own conversations: this entrance, the Front Desk, routine runs and 
 #: **derived** from (`agag.execpool`). The two must name the same work: a
 #: sentence and a pool that disagree is precisely the failure this list
 #: exists to make impossible.
-EXEC_ROLES = ("front", "character_talk", "routine_run", "argue")
+EXEC_ROLES = ("front", "desk", "routine_run", "argue")
 #: What running under no selection costs. Published because a threshold like
 #: "until the pool is 70 % used" cannot be judged against a default that
 #: declines to name a pool.

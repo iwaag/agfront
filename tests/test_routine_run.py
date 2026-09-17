@@ -140,7 +140,7 @@ def test_a_run_topic_is_served_by_routine_run_with_its_own_guide(monkeypatch, tm
     zulip_listener.handle_topic(client, RUN_CHANNEL, RUN_TOPIC)
     assert role_calls(calls) == [((RUN_CHANNEL, RUN_TOPIC), "routine_run")]
     prompt, cwd = runs(calls)[0][1], runs(calls)[0][2]
-    assert "RUN GUIDE" in prompt and "FRONT GUIDE" not in prompt and "CHARACTER GUIDE" not in prompt
+    assert "RUN GUIDE" in prompt and "FRONT GUIDE" not in prompt and "DESK GUIDE" not in prompt
     # The record keeps its ids, and the origin note is not part of it.
     chatlog = (cwd / "chatlog.md").read_text()
     assert chatlog.startswith(f"# #{RUN_CHANNEL} › {RUN_TOPIC}\n")
@@ -154,7 +154,7 @@ def test_a_run_topic_is_served_by_routine_run_with_its_own_guide(monkeypatch, tm
 
 def test_the_role_is_the_prefix():
     assert zulip_listener.role_for(RUN_CHANNEL, RUN_TOPIC) == "routine_run"
-    assert zulip_listener.role_for("front", "front-desk-x") == "character_talk"
+    assert zulip_listener.role_for("front", "front-desk-x") == "desk"
     assert zulip_listener.role_for("front", "front-routine-ghtrends-2026-09-07T07:00Z") == "front"
 
 
@@ -185,7 +185,7 @@ def test_opening_a_run_from_the_desk_starts_it_after_the_desk_reply(monkeypatch,
         (RUN_CHANNEL, RUN_TOPIC): [origin_note(), opening()],
     })
     zulip_listener.handle_topic(client, CHANNEL, DESK_TOPIC)
-    assert role_calls(calls) == [((CHANNEL, DESK_TOPIC), "character_talk"),
+    assert role_calls(calls) == [((CHANNEL, DESK_TOPIC), "desk"),
                                  ((RUN_CHANNEL, RUN_TOPIC), "routine_run")]
     posted = [c[1:3] for c in calls if c[0] == "reply"]
     # desk ack, desk reply, then the run's ack and the run's entry
@@ -202,7 +202,7 @@ def test_a_started_run_is_not_started_again(monkeypatch, tmp_path):
         (RUN_CHANNEL, RUN_TOPIC): [origin_note(), opening(), ack(), entry()],
     })
     zulip_listener.handle_topic(client, CHANNEL, DESK_TOPIC)
-    assert role_calls(calls) == [((CHANNEL, DESK_TOPIC), "character_talk")]
+    assert role_calls(calls) == [((CHANNEL, DESK_TOPIC), "desk")]
     # The desk serving sees the run as a thread beside its chatlog.
     cwd = runs(calls)[0][2]
     assert (cwd / "threads" / RUN_CHANNEL / f"{RUN_TOPIC}.md").read_text().count("[Front (you)") == 2
@@ -219,7 +219,7 @@ def test_a_run_opened_by_a_callback_serving_is_started_too(monkeypatch, tmp_path
         (RUN_CHANNEL, RUN_TOPIC): [origin_note(), opening()],
     })
     zulip_listener.handle_mention(client, "work-old", "workrun-old")
-    assert role_calls(calls) == [((CHANNEL, DESK_TOPIC), "character_talk"),
+    assert role_calls(calls) == [((CHANNEL, DESK_TOPIC), "desk"),
                                  ((RUN_CHANNEL, RUN_TOPIC), "routine_run")]
 
 
@@ -369,7 +369,7 @@ def test_the_run_guide_exists_and_names_the_finish_block():
 
 
 def test_the_requester_guides_say_how_to_open_a_run():
-    for role in ("front", "character_talk"):
+    for role in ("front", "desk"):
         text = zulip_listener.guide(role, "guide.md")
         assert "routinerun-" in text and "agentchat topics routine-" in text
         assert "guide" in text and "schedule" in text  # says there is none
@@ -493,7 +493,7 @@ def test_a_finished_run_serves_the_conversation_that_asked_for_it(monkeypatch, t
     zulip_listener.handle_topic(client, RUN_CHANNEL, RUN_TOPIC)
     assert len(desk_runs(calls)) == 1
     # An ordinary serving of the requester: its own role, its own conversation.
-    assert desk_runs(calls)[0][4] == zulip_listener.CHARACTER_ROLE
+    assert desk_runs(calls)[0][4] == zulip_listener.DESK_ROLE
     # And it happened after the run's own record, never before it.
     assert calls.index(desk_runs(calls)[0]) > max(
         i for i, c in enumerate(calls) if c[0] == "reply" and c[2] == RUN_TOPIC)

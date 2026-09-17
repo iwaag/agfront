@@ -17,7 +17,7 @@ model would have seen.
 Against the old implementation every assertion here fails: the prompt was
 `chatlog_placement` plus the guide, and the conversation appeared in neither.
 
-Covered: all three Front roles (`front`, `character_talk`, `routine_run`), a
+Covered: all three Front roles (`front`, `desk`, `routine_run`), a
 history too large to carry whole, and a genuinely empty conversation.
 """
 
@@ -102,7 +102,7 @@ def stub_agent(tmp_path) -> Path:
         'model = "ollama/test-model"\n'
         + "".join(
             f"[roles.{role}]\nprofile = \"stub\"\nrequires = []\nallowed_tools = \"Read\"\n"
-            for role in ("front", "character_talk", "routine_run")
+            for role in ("front", "desk", "routine_run")
         )
     )
     (tmp_path / ".local").mkdir(exist_ok=True)
@@ -159,7 +159,7 @@ def serve_and_capture(monkeypatch, tmp_path, channel, topic, history) -> str:
     "channel,topic,role",
     [
         ("front", "front-20260913-090000", "front"),
-        ("front", "front-desk-20260913-090000", "character_talk"),
+        ("front", "front-desk-20260913-090000", "desk"),
         ("routine-publish", "routinerun-20260913T0900Z", "routine_run"),
     ],
 )

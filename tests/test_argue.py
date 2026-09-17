@@ -119,6 +119,8 @@ def test_an_argue_serving_runs_the_argue_role_without_a_handoff_mention(monkeypa
     assert "ARGUE GUIDE" in prompt
     assert "[Developer #92]" in prompt  # message ids reach the run
     assert (cwd / "tools" / "agents.md").is_file() and cwd.name == "argue"
+    # No character reaches a discussion run (`argue` p2): no file, no placement.
+    assert not (cwd / "characters.md").exists() and "characters" not in prompt and "settings revision" not in prompt
     # The ack, then the reply exactly as written: no `@**Developer**` in front of it.
     assert [r[3] for r in replies(calls)] == [zulip_listener.ACK_TEXT, "Tell me more about what you imagine."]
     assert posts(calls) == []

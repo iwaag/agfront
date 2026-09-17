@@ -118,8 +118,8 @@ def wire(monkeypatch, tmp_path, calls, *, answer="on it", run=None):
     guides = tmp_path / "guides"
     (guides / "front").mkdir(parents=True)
     (guides / "front" / "guide.md").write_text("FRONT GUIDE")
-    (guides / "character_talk").mkdir(parents=True)
-    (guides / "character_talk" / "guide.md").write_text("CHARACTER GUIDE")
+    (guides / "desk").mkdir(parents=True)
+    (guides / "desk" / "guide.md").write_text("DESK GUIDE")
     monkeypatch.setattr(zulip_listener, "GUIDES", guides)
     # No character settings unless a test places some (`settings_at`).
     monkeypatch.setattr(agfront_settings, "settings_root", lambda: tmp_path / "no-settings")
@@ -462,18 +462,18 @@ def role_calls(calls):
     return [(call[3], call[4]) for call in calls if call[0] == "front"]
 
 
-def test_a_front_desk_topic_is_served_by_character_talk_with_its_own_guide(monkeypatch, tmp_path):
+def test_a_front_desk_topic_is_served_by_desk_with_its_own_guide(monkeypatch, tmp_path):
     """The voice is the guide, not the role's name: a `front-desk-` serving
-    runs `character_talk` and its prompt carries that guide and no other."""
+    runs `desk` and its prompt carries that guide and no other."""
     calls = []
     wire(monkeypatch, tmp_path, calls, answer="やっほー✨")
     zulip_listener.handle_topic(Client(calls, history=[desk_message()]), CHANNEL, DESK_TOPIC)
-    assert role_calls(calls) == [((CHANNEL, DESK_TOPIC), "character_talk")]
+    assert role_calls(calls) == [((CHANNEL, DESK_TOPIC), "desk")]
     prompt = next(c[1] for c in calls if c[0] == "front")
-    assert "CHARACTER GUIDE" in prompt and "FRONT GUIDE" not in prompt
+    assert "DESK GUIDE" in prompt and "FRONT GUIDE" not in prompt
     # Its workspace is filed under the role, like its run record.
     cwd = next(c[2] for c in calls if c[0] == "front")
-    assert cwd == tmp_path / "topics" / CHANNEL / DESK_TOPIC / "1" / "character_talk"
+    assert cwd == tmp_path / "topics" / CHANNEL / DESK_TOPIC / "1" / "desk"
     # Since p2 the desk chatlog keeps the ids (`agfront.evidence`).
     assert "[Developer #1]" in (cwd / "chatlog.md").read_text()
     assert replies(calls)[-1] == "@**Developer**\n\nやっほー✨"
@@ -485,12 +485,12 @@ def test_an_ordinary_front_topic_is_still_served_by_front(monkeypatch, tmp_path)
     zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
     assert role_calls(calls) == [((CHANNEL, TOPIC), "front")]
     prompt = next(c[1] for c in calls if c[0] == "front")
-    assert "FRONT GUIDE" in prompt and "CHARACTER GUIDE" not in prompt
+    assert "FRONT GUIDE" in prompt and "DESK GUIDE" not in prompt
 
 
 def test_the_role_is_the_prefix_and_nothing_else():
-    assert zulip_listener.role_for("front", "front-desk-abc") == "character_talk"
-    assert zulip_listener.role_for("front", "front-desk-") == "character_talk"
+    assert zulip_listener.role_for("front", "front-desk-abc") == "desk"
+    assert zulip_listener.role_for("front", "front-desk-") == "desk"
     assert zulip_listener.role_for("front", "front-20260817-p2-chat") == "front"
     assert zulip_listener.role_for("front", "front-routine-ghtrends-2026-09-07T07:00Z") == "front"
     # A remote topic never decides the role; only the home does.
@@ -509,9 +509,9 @@ def test_a_callback_into_a_front_desk_conversation_keeps_its_voice(monkeypatch, 
         (REMOTE_CHANNEL, REMOTE_TOPIC): [note, remote_message("done: repo x, 123 stars")],
     })
     zulip_listener.handle_mention(client, REMOTE_CHANNEL, REMOTE_TOPIC)
-    assert role_calls(calls) == [((CHANNEL, DESK_TOPIC), "character_talk")]
+    assert role_calls(calls) == [((CHANNEL, DESK_TOPIC), "desk")]
     prompt, cwd = next((c[1], c[2]) for c in calls if c[0] == "front")
-    assert "CHARACTER GUIDE" in prompt
+    assert "DESK GUIDE" in prompt
     assert "done: repo x" in (cwd / "threads" / REMOTE_CHANNEL / f"{REMOTE_TOPIC}.md").read_text()
     assert {c[1] for c in calls if c[0] == "reply"} == {CHANNEL}
     assert [c for c in calls if c[0] == "reply"][-1][2] == DESK_TOPIC
@@ -540,16 +540,15 @@ def test_a_front_desk_failure_names_its_role(monkeypatch, tmp_path):
 
     monkeypatch.setattr(zulip_listener, "run_front", explode)
     zulip_listener.handle_topic(Client(calls, history=[desk_message()]), CHANNEL, DESK_TOPIC)
-    assert replies(calls)[-1] == "@**Developer**\n\nfailed during character_talk: character_talk run exited 1"
+    assert replies(calls)[-1] == "@**Developer**\n\nfailed during desk: desk run exited 1"
 
 
-def test_the_character_guide_exists_and_names_both_voices():
+def test_the_desk_guide_exists_and_carries_no_character():
     """The guide is read from disk per run; a missing one is a run with no
-    instruction. It has to define the two voices and the event-driven turn,
-    and must not carry the old `agentchat wait` advice."""
-    text = zulip_listener.guide("character_talk", "guide.md")
-    # Since p2 the character is the settings' lore, not a description here.
-    assert "characters.md" in text and "ギャル" not in text
+    instruction. Since `argue` p2 it defines no voice at all: the discussion
+    is plain, and the scene is rendered afterwards by another role."""
+    text = zulip_listener.guide("desk", "guide.md")
+    assert "characters.md" not in text and "ag-dialogue" not in text and "lore" not in text
     assert "agentchat send" in text
     assert "agentchat wait" not in text
     assert "read --since" in text or "--since" in text
@@ -624,22 +623,18 @@ def the_run(calls):
     return next(c for c in calls if c[0] == "front")
 
 
-def test_a_front_desk_run_is_given_the_characters_of_one_revision(monkeypatch, tmp_path):
-    """The lore is the character: whole, from the pinned revision, with the
-    section that is Front marked — and the revision stamped into the record."""
+def test_a_front_desk_run_receives_no_character_settings_at_all(monkeypatch, tmp_path):
+    """`argue` p2: with a settings tree synced and full of lore, the desk run
+    sees none of it — no file, no placement line, no revision in its record."""
     calls = []
-    wire(monkeypatch, tmp_path, calls, answer="やっほー✨")
-    settings_at(monkeypatch, tmp_path)
+    wire(monkeypatch, tmp_path, calls, answer="hello")
+    settings_at(monkeypatch, tmp_path, front_lore="EXTREME-LORE-MARKER 語尾は必ず「だっちゃ」")
     zulip_listener.handle_topic(Client(calls, history=[desk_message()]), CHANNEL, DESK_TOPIC)
     prompt, cwd, extra = the_run(calls)[1], the_run(calls)[2], the_run(calls)[5]
-    characters = (cwd / "characters.md").read_text(encoding="utf-8")
-    assert "settings revision aaaa1111" in characters
-    assert "## front — **this is you**" in characters and "「姐さん」" in characters
-    assert "## autolab" in characters and "「親方」" in characters and "agents: autolab" in characters
-    assert "this is you" not in characters.split("## autolab")[1]
-    assert json.loads((cwd / "settings.json").read_text())["revision"] == "aaaa1111"
-    assert 'placed beside it in "characters.md" (settings revision aaaa1111)' in prompt
-    assert extra == {"settings_revision": "aaaa1111"}
+    assert not (cwd / "characters.md").exists() and not (cwd / "settings.json").exists()
+    everything = prompt + "".join(p.read_text(encoding="utf-8") for p in cwd.rglob("*") if p.is_file())
+    assert "EXTREME-LORE-MARKER" not in everything and "だっちゃ" not in everything
+    assert "characters" not in prompt and "settings revision" not in prompt and extra is None
 
 
 def test_the_desk_chatlog_names_the_conversation_and_keeps_every_id(monkeypatch, tmp_path):
@@ -673,7 +668,7 @@ def test_a_callback_s_thread_carries_ids_and_says_when_it_is_resolved(monkeypatc
         (REMOTE_CHANNEL, f"✔ {REMOTE_TOPIC}"): [note, done],
     })
     zulip_listener.handle_mention(client, REMOTE_CHANNEL, REMOTE_TOPIC)
-    assert role_calls(calls) == [((CHANNEL, DESK_TOPIC), "character_talk")]
+    assert role_calls(calls) == [((CHANNEL, DESK_TOPIC), "desk")]
     prompt, cwd = the_run(calls)[1], the_run(calls)[2]
     thread = (cwd / "threads" / REMOTE_CHANNEL / f"{REMOTE_TOPIC}.md").read_text(encoding="utf-8")
     assert thread.startswith(f"# #{REMOTE_CHANNEL} › {REMOTE_TOPIC}\n")
@@ -681,7 +676,7 @@ def test_a_callback_s_thread_carries_ids_and_says_when_it_is_resolved(monkeypatc
     assert "[Autolab #5203] sender 11" in thread and "commit a99625f" in thread
     assert "selfnote" not in thread
     assert f'"threads/{REMOTE_CHANNEL}/{REMOTE_TOPIC}.md"' in prompt
-    assert "characters.md" in prompt and (cwd / "characters.md").exists()
+    assert "characters.md" not in prompt and not (cwd / "characters.md").exists()
 
 
 def test_a_thread_that_cannot_be_read_is_written_as_such(monkeypatch, tmp_path):
@@ -718,41 +713,6 @@ def test_a_bounded_history_says_so(monkeypatch, tmp_path):
     assert "Only the newest 3 messages were fetched" in chatlog and "--since" in chatlog
 
 
-def test_without_settings_the_run_still_happens_and_is_told_why(monkeypatch, tmp_path):
-    calls = []
-    wire(monkeypatch, tmp_path, calls)  # settings_root → an absent directory
-    zulip_listener.handle_topic(Client(calls, history=[desk_message()]), CHANNEL, DESK_TOPIC)
-    prompt, cwd, extra = the_run(calls)[1], the_run(calls)[2], the_run(calls)[5]
-    assert "No character settings are available for this run" in prompt
-    assert "agentroom-settings sync" in prompt
-    assert not (cwd / "characters.md").exists() and extra is None
-    assert replies(calls)[-1].endswith("on it")
-
-
-def test_a_settings_update_reaches_the_next_run_not_the_one_in_progress(monkeypatch, tmp_path):
-    """Pinned at the start of the serving and copied: what the run reads is
-    the file in its own workspace, which a later sync does not touch."""
-    calls = []
-    root = settings_at(monkeypatch, tmp_path, revision="aaaa1111", front_lore="first lore")
-
-    def sync_during_the_run(cwd):
-        # A new revision lands while the run is reading its files.
-        snapshot = root / "revisions" / "bbbb2222"
-        shutil.copytree(root / "revisions" / "aaaa1111", snapshot)
-        (snapshot / "characters" / "front" / "lore.md").write_text("second lore", encoding="utf-8")
-        (root / "active.json").write_text(json.dumps({"revision": "bbbb2222"}), encoding="utf-8")
-        assert "first lore" in (cwd / "characters.md").read_text(encoding="utf-8")
-
-    wire(monkeypatch, tmp_path, calls, run=sync_during_the_run)
-    monkeypatch.setattr(agfront_settings, "settings_root", lambda: root)
-    zulip_listener.handle_topic(Client(calls, history=[desk_message()]), CHANNEL, DESK_TOPIC)
-    assert the_run(calls)[5] == {"settings_revision": "aaaa1111"}
-    calls.clear()
-    zulip_listener.handle_topic(Client(calls, history=[desk_message()]), CHANNEL, DESK_TOPIC)
-    assert the_run(calls)[5] == {"settings_revision": "bbbb2222"}
-    assert "second lore" in (the_run(calls)[2] / "characters.md").read_text(encoding="utf-8")
-
-
 def test_an_ordinary_front_run_is_untouched_by_the_desk_s_files(monkeypatch, tmp_path):
     calls = []
     wire(monkeypatch, tmp_path, calls)
@@ -774,33 +734,18 @@ def test_the_settings_root_is_configuration_of_this_instance(monkeypatch, tmp_pa
     assert agfront_settings.settings_root() == tmp_path / "env"
 
 
-# --- the Front Desk: the dialogue block in the post (front_desk p2 step 3) --
+# --- a reply is posted as written: no run's output is parsed for a scene ------
 
 
-def test_a_desk_reply_with_a_dialogue_is_posted_as_reply_plus_canonical_block(monkeypatch, tmp_path):
+def test_a_desk_reply_is_posted_as_written_even_when_it_carries_a_block(monkeypatch, tmp_path):
+    """The combined path is gone (`argue` p2): nothing validates, rewrites or
+    strips a desk reply, so a block a run improvised is just text."""
     calls = []
-    scene = ('```ag-dialogue\n{"schema": "ag.frontdesk-dialogue.v1", "settings_revision": "wrong", "turns": ['
-             '{"character": "front", "text": "親方、どう？"}, '
-             '{"character": "autolab", "text": "終わった。", "sources": [{"channel": "work-g-13", "topic": "workrun-task1-g-13", "message_id": 5203}]}]}\n```')
-    wire(monkeypatch, tmp_path, calls, answer=f"できたよ🎉\n\n{scene}")
+    wire(monkeypatch, tmp_path, calls, answer="done\n\n```ag-dialogue\n{oops\n```")
     settings_at(monkeypatch, tmp_path)
-    zulip_listener.handle_topic(Client(calls, history=[desk_message("どうなった？")]), CHANNEL, DESK_TOPIC)
-    posted = replies(calls)[-1]
-    assert posted.startswith("@**Developer**\n\nできたよ🎉\n\n```ag-dialogue\n")
-    body = json.loads(posted.split("```ag-dialogue\n", 1)[1].rsplit("\n```", 1)[0])
-    assert body["settings_revision"] == "aaaa1111"  # the pinned one, not the run's
-    assert [t["character"] for t in body["turns"]] == ["front", "autolab"]
-    assert "wrong" not in posted
-
-
-def test_a_desk_reply_with_a_broken_block_is_posted_with_the_error_fence(monkeypatch, tmp_path):
-    calls = []
-    wire(monkeypatch, tmp_path, calls, answer="できたよ🎉\n\n```ag-dialogue\n{oops\n```")
-    settings_at(monkeypatch, tmp_path)
-    zulip_listener.handle_topic(Client(calls, history=[desk_message("どうなった？")]), CHANNEL, DESK_TOPIC)
-    posted = replies(calls)[-1]
-    assert posted.startswith("@**Developer**\n\nできたよ🎉\n\n```ag-dialogue-error\n")
-    assert (the_run(calls)[2] / "dialogue-error.txt").exists()
+    zulip_listener.handle_topic(Client(calls, history=[desk_message("how did it go?")]), CHANNEL, DESK_TOPIC)
+    assert replies(calls)[-1] == "@**Developer**\n\ndone\n\n```ag-dialogue\n{oops\n```"
+    assert not (the_run(calls)[2] / "dialogue-error.txt").exists()
 
 
 def test_an_ordinary_front_reply_is_never_parsed_for_a_block(monkeypatch, tmp_path):
@@ -951,7 +896,7 @@ def test_the_covered_roles_are_the_four_the_sentence_names():
     # `COVERS` says "this entrance, the Front Desk, routine runs and argues",
     # and the pool is derived from exactly those. A sentence and a pool about
     # different work is the failure this pairing exists to prevent.
-    assert front_instance.SPEC.exec_roles == ("front", "character_talk", "routine_run", "argue")
+    assert front_instance.SPEC.exec_roles == ("front", "desk", "routine_run", "argue")
 
 
 def test_a_role_moved_in_the_overlay_moves_the_derived_default():
@@ -963,7 +908,7 @@ def test_a_role_moved_in_the_overlay_moves_the_derived_default():
     """
     config, _ = _real_config()
     overlay = _tomllib.loads(
-        'schema = "ag.agent-config.v2"\n[roles.character_talk]\nprofile = "agy"\n'
+        'schema = "ag.agent-config.v2"\n[roles.desk]\nprofile = "agy"\n'
     )
     found = execpool.derive(
         None, front_instance.SPEC.exec_roles, config, overlay,
@@ -972,7 +917,7 @@ def test_a_role_moved_in_the_overlay_moves_the_derived_default():
     assert execpool.JOIN in found.pool and "antigravity" in found.pool
     declared = front_instance.SPEC.exec_options_with_default()[0]
     lines = execpool.diagnose([declared], [found])
-    assert len(lines) == 1 and "character_talk -> agy/agy (antigravity)" in lines[0]
+    assert len(lines) == 1 and "desk -> agy/agy (antigravity)" in lines[0]
 
 
 def test_an_unavailable_harness_is_not_reported_as_a_wrong_declaration(monkeypatch):

@@ -30,13 +30,29 @@ ROUTES = {FRONT_TOPIC_PREFIX: handle_topic, ROUTINE_RUN_PREFIX: handle_topic, AR
 
 
 def main() -> None:
+    import os
+
+    from agag.agent import log_only
+    from agag.mirror import Mirror
+    from agag.zulip import ZulipClient, log
+
+    # One mirror for both readers of the realm in this process: the
+    # listener's intake and the rendering worker (`agfront.render`, `argue`
+    # p2). The worker has its own checkpoint, store and client, and nothing
+    # it does — a slow run, a failure, being switched off with
+    # `AGFRONT_RENDER=0` — is visible to the serving queue.
+    mirror = Mirror.open(SPEC.zulip_env, SPEC.local / "mirror", log=log)
+    if os.environ.get("AGFRONT_RENDER", "1") != "0" and not log_only(SPEC):
+        from . import render
+
+        render.start(mirror, ZulipClient.from_env(SPEC.zulip_env))
     # A run Front opened just before going down has nobody else to start it,
     # and a request a run reported into has nobody else to continue it
     # (`agfront.routine`). Neither is visible to a last-speaker check, so the
     # listener runs `recover_runs` after every recovery it makes — startup,
     # and every time its mirror re-reads the realm — off the mirror's own
     # index, at no Zulip cost (`better_zulip_call` p1 step 5).
-    listener_main(SPEC, ROUTES, on_mention=handle_mention, on_recover=recover_runs)
+    listener_main(SPEC, ROUTES, on_mention=handle_mention, on_recover=recover_runs, mirror=mirror)
 
 
 if __name__ == "__main__":
