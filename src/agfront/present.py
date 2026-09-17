@@ -33,7 +33,6 @@ it is an error for the job to retry, never a partial record.
 
 from __future__ import annotations
 
-import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,6 +40,7 @@ from typing import Iterable
 
 from agag.agent import is_ack
 from agag.argue import speaker_of
+from agag.memo import DIALOGUE_SCHEMA, fingerprint as shared_fingerprint
 from agag.selfnote import is_speech
 from agag.topics import guide as shared_guide, prompt_with_guide
 
@@ -52,7 +52,7 @@ PRESENT_ROLE = "present"
 #: check): a result names the renderer it was made by, and a new version is a
 #: new interpretation rather than a silent replacement.
 RENDERER_VERSION = "agfront.present/1"
-RECORD_SCHEMA = "ag.memo-dialogue.v1"
+RECORD_SCHEMA = DIALOGUE_SCHEMA
 #: How much earlier conversation a rendering is shown, newest last.
 CONTEXT_POSTS = 12
 CONTEXT_POST_CHARS = 1500
@@ -128,18 +128,12 @@ def is_renderable(message: dict, agents: dict[int, str]) -> bool:
 
 
 def fingerprint(posts: Iterable[SourcePost | dict]) -> str:
-    """What was rendered, so an edit or a deletion afterwards is visible:
-    a digest over each post's id and its content as it stood."""
-    digest = hashlib.sha256()
-    rows = []
-    for post in posts:
-        if isinstance(post, SourcePost):
-            rows.append((post.message_id, post.content))
-        else:
-            rows.append((int(post["id"]), str(post.get("content") or "")))
-    for message_id, content in sorted(rows):
-        digest.update(f"{message_id}\0{content}\0".encode("utf-8"))
-    return f"sha256:{digest.hexdigest()}"
+    """What was rendered, so an edit or a deletion afterwards is visible.
+    The digest itself is the shared contract (`agag.memo.fingerprint`): the
+    relay recomputes it over the source as it stands."""
+    return shared_fingerprint(
+        (post.message_id, post.content) if isinstance(post, SourcePost) else (post["id"], post.get("content"))
+        for post in posts)
 
 
 # --- the snapshot a run reads -------------------------------------------------

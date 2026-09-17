@@ -65,7 +65,9 @@ from typing import Callable
 
 from agag.agent import is_ack, run_role
 from agag.argue import ARGUE_TAG, is_argue_topic
-from agag.memo import MEMO_CHANNEL, SOURCE_TAG, memo_topic, parse_record, render_record, source_note
+from agag.memo import (
+    MEMO_CHANNEL, RENDER_TAG, SOURCE_TAG, memo_topic, parse_record, render_record, render_request_note, source_note,
+)
 from agag.mirror import Mirror, bare_topic
 from agag.selfnote import is_speech, parse_note
 from agag.topics import next_record_path
@@ -90,8 +92,6 @@ from .settings import CharacterSettings, SettingsUnavailable, pin
 
 FRONT_CHANNEL = "front"
 FRONT_DESK_PREFIX = "front-desk-"
-#: `[selfnote][render] <settings revision>` — an explicit interpretation request.
-RENDER_TAG = "render"
 QUIET_SECONDS = 45.0
 #: While a serving's ack is the newest post a reply is on its way; waited for
 #: this long at most, so a run that died after its ack does not hold a
@@ -125,12 +125,6 @@ def source_anchor(mirror: Mirror, channel: str, topic: str) -> int | None:
         return min((n.message_id for n in notes), default=None)
     messages = mirror.messages(channel, bare)
     return messages[0].id if messages else None
-
-
-def render_request_note(revision: str) -> str:
-    from agag.selfnote import note
-
-    return note(RENDER_TAG, revision)
 
 
 def job_id(anchor: int, message_ids, fingerprint_: str, revision: str, renderer: str) -> str:
