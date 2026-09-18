@@ -27,8 +27,7 @@ from .settings import CharacterSettings
 
 SCHEMA = "ag.frontdesk-dialogue.v1"
 FENCE = "ag-dialogue"
-#: A few short turns is the target; more than this is a script, not a scene.
-MAX_TURNS = 12
+# Turn count follows the source discussion; memo records split by transport size.
 MAX_TURN_CHARS = 1200
 MAX_SOURCES = 8
 
@@ -37,7 +36,7 @@ _MENTION = re.compile(r"@\*\*([^*\n]+)\*\*")
 _ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
 __all__ = [
-    "FENCE", "MAX_TURNS", "SCHEMA", "Dialogue", "DialogueError", "Source", "Turn",
+    "FENCE", "SCHEMA", "Dialogue", "DialogueError", "Source", "Turn",
     "parse_block", "split_reply",
 ]
 
@@ -136,8 +135,6 @@ def parse_block(body: str, settings: CharacterSettings | None, *,
     turns = data.get("turns")
     if not isinstance(turns, list) or not turns:
         raise DialogueError("turns must be a non-empty list")
-    if len(turns) > MAX_TURNS:
-        raise DialogueError(f"{len(turns)} turns is more than the {MAX_TURNS} a scene holds")
     known = set(settings.characters)
     parsed: list[Turn] = []
     for position, entry in enumerate(turns, 1):

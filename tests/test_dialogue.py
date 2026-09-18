@@ -61,6 +61,15 @@ def test_a_mention_inside_a_turn_is_reduced_to_the_name():
     assert "@**" not in found.serialize()
 
 
+@pytest.mark.parametrize("count", [19, 120])
+def test_long_discussions_keep_every_turn_in_order(count):
+    turns = [{"character": "front", "text": f"Point {i}",
+              "sources": [{"channel": "argue", "topic": "argue-long", "message_id": 7230}]}
+             for i in range(count)]
+    found = parse_block(json.dumps({"schema": dialogue.SCHEMA, "turns": turns}), SETTINGS)
+    assert json.loads(found.serialize())["turns"] == turns
+
+
 @pytest.mark.parametrize("body, reason", [
     ("not json", "not valid JSON"),
     ("[]", "JSON object"),
@@ -70,7 +79,6 @@ def test_a_mention_inside_a_turn_is_reduced_to_the_name():
     (json.dumps({"schema": dialogue.SCHEMA, "turns": [{"character": "front", "text": "  "}]}), "text is empty"),
     (json.dumps({"schema": dialogue.SCHEMA, "turns": [{"character": "front", "text": "x", "sources": [{"channel": "a"}]}]}), "needs channel and topic"),
     (json.dumps({"schema": dialogue.SCHEMA, "turns": [{"character": "front", "text": "x", "sources": [{"channel": "a", "topic": "b", "message_id": "n"}]}]}), "not an integer"),
-    (json.dumps({"schema": dialogue.SCHEMA, "turns": [{"character": "front", "text": "x"}] * (dialogue.MAX_TURNS + 1)}), "more than"),
 ])
 def test_an_unusable_block_names_what_is_wrong(body, reason):
     with pytest.raises(DialogueError, match=reason):

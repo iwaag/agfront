@@ -50,5 +50,5 @@ machine blocks.
 
 Never write an `@**name**` mention in a turn; write the plain name.
 
-If a post is so long that re-voicing all of it cannot fit in a few turns,
-keep its claims and compress its wording — never its substance.
+Use as many turns as the source needs. Long discussions need not fit into a
+short scene; the posting layer splits memo records to fit the transport.
