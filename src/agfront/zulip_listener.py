@@ -100,6 +100,7 @@ from agag.topics import (
     topic_workspace,
     write_threads,
 )
+from agag import serving as serving_record
 from agag.execopt import Selection
 from agag.reply import repair_with
 from agag.intro import write_agents_md
@@ -109,6 +110,7 @@ from agag.zulip import (
     RESOLVED_TOPIC_PREFIX,
     ZulipClient,
     live_topic_name,
+    locate,
     log,
     note_served,
     remotes_for_home,
@@ -578,10 +580,16 @@ def handle_mention(client: ZulipClient, channel: str, topic: str) -> None:
     # note recorded finds nothing, and the reply opens a second topic beside
     # the real one — a twin, without the origin note, whose report can never be
     # delivered. `routine_tests` p1 step 3 watched that happen three times.
-    live = live_topic_name(client, home.channel, home.topic)
+    # Since `explicit_reply` p1 step 3 the root note may carry the anchor of
+    # the post the delegation was made for, and home is located by that id
+    # first (`agag.zulip.locate`): a renamed home is still found, and a
+    # reused name is not mistaken for it.
+    located = locate(client, home)
+    live = located.topic if located is not None else home.topic
     if live.startswith(RESOLVED_TOPIC_PREFIX):
         relay_late_answer(client, home, live, channel, topic, self_id)
         return
+    home = Conversation(home.channel, live, home.anchor)
     log(f"mention in {channel!r}/{topic!r} serves {home}")
     # An argue home (`argue` p1 step 3): served by the argue role, without
     # the hand-off mention, exactly as its owner route serves it.
@@ -605,11 +613,18 @@ def handle_mention(client: ZulipClient, channel: str, topic: str) -> None:
         # conversation and may carry a command addressed to somebody else.
         exec_options=exec_options_for(SPEC, client),
     )
-    served = note_served(client, home, channel, topic)
-    if served is None:
-        log(f"nothing to mark served in {channel!r}/{topic!r}")
-    else:
-        log(f"marked {channel!r}/{topic!r} served up to {served} in {home}")
+    if serving_record.current() is None:
+        # Outside a listener (a test, a one-off command) the mark is written
+        # here. Under `agag.listen` the executor writes it after the reply's
+        # delivery is *confirmed*, bound to the mention that triggered the
+        # serving (`explicit_reply` p1 step 3), so a crash between the home
+        # reply and the mark, or a second mention arriving mid-run, is not
+        # spent by a mark written from here.
+        served = note_served(client, home, channel, topic)
+        if served is None:
+            log(f"nothing to mark served in {channel!r}/{topic!r}")
+        else:
+            log(f"marked {channel!r}/{topic!r} served up to {served} in {home}")
     start_opened_runs(client, home.as_pair())
     # The common way a run ends: an agent answered, Front was named, and the
     # serving that read the answer wrote the finish block. Without this the
