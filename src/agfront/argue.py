@@ -88,12 +88,14 @@ def anchor_placement(anchor: Anchor | None) -> str:
 
 
 def argue_prompt(bot_name: str, conversation: str, anchor: Anchor | None, desire: Desire | None,
-                 history: list[dict], *, threads=(), workspace: Path | None = None) -> str:
+                 history: list[dict], *, threads=(), workspace: Path | None = None, continuation: str = "") -> str:
     lines = [chatlog_placement(bot_name), anchor_placement(anchor), desire_placement(desire, history)]
     if placement := threads_placement(threads, workspace or Path(".")):
         lines.append(placement)
     lines += ["", conversation]
-    return prompt_with_guide(lines, front.guide(ARGUE_ROLE, "guide.md"), reply=True)
+    if continuation:
+        lines += ["", continuation]
+    return prompt_with_guide(lines, front.guide(ARGUE_ROLE, "guide.md"), reply=True, continuation=bool(continuation))
 
 
 def humans_of(client: ZulipClient) -> set[int]:
@@ -122,16 +124,19 @@ def serve_argue(context) -> TopicResult:
     for pair in getattr(context, "extra_threads", ()):
         if pair not in remotes:
             remotes.append(pair)
-    threads = write_evidence_threads(context.client, workspace, remotes, context.self_id, drop=is_ack)
+    snapshots: list = []
+    threads = write_evidence_threads(context.client, workspace, remotes, context.self_id, drop=is_ack,
+                                     collected=snapshots)
     context.step = "harvest"
     write_agents_md(context.client, workspace)
 
     context.step = ARGUE_ROLE
     home = (context.channel, context.topic)
     meta = {"argue": anchor.message_id} if anchor else None
+    carried = conversation_context(chatlog)
     output = front.run_front(
-        argue_prompt(context.bot_name, conversation_context(chatlog), anchor, desire, context.history,
-                     threads=threads, workspace=workspace),
+        argue_prompt(context.bot_name, carried, anchor, desire, context.history, threads=threads,
+                     workspace=workspace, continuation=front.continuation_for(context, carried, snapshots)),
         workspace, home, ARGUE_ROLE, extra_meta=meta, selection=context.selection, journal=getattr(context, "journal", None),
     )
 

@@ -23,6 +23,7 @@ from dataclasses import replace
 
 import pytest
 from agag import topics
+from agag.continuation import CONTINUATION_GUIDE, END as CONTINUATION_END
 from agag.reply import REPLY_GUIDE
 from agag.topics import GuideError
 
@@ -184,14 +185,20 @@ def test_the_chatlog_and_the_prompt_are_the_run_s_whole_input(monkeypatch, tmp_p
     prompt, cwd, home = next(
         (call[1], call[2], call[3]) for call in calls if call[0] == "front"
     )
-    assert prompt == (
+    head = (
         "The chatlog is placed in the working directory. "
         "You are 'Front' in the chatlog.\n"
         "\n"
         + topics.conversation_context(f"[Developer] {REQUEST}\n")
-        + "\n\nFRONT GUIDE"
-        + f"\n\n{REPLY_GUIDE}"
+        + "\n\n"
     )
+    assert prompt.startswith(head)
+    # Then the continuation view (`agag.continuation`), the guide, and the
+    # two shared contracts — the reply mark and the carry-forward block.
+    view, _, tail = prompt[len(head):].partition("\n\nFRONT GUIDE")
+    assert view.startswith("How this conversation stands") and CONTINUATION_END in view
+    assert f"[Developer #1] {REQUEST}" in view
+    assert tail == f"\n\n{REPLY_GUIDE}\n\n{CONTINUATION_GUIDE}"
     assert cwd == gen_dir(tmp_path, 1)
     # The same bytes are in the file and in the prompt: one rendering, one
     # snapshot, so a run cannot be shown two versions of one conversation

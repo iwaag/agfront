@@ -83,10 +83,17 @@ def format_evidence(
 
 def write_evidence_threads(
     client: ZulipClient, directory: Path, conversations, self_id: int, *,
-    history_messages: int = HISTORY_MESSAGES, drop=None, log=default_log,
+    history_messages: int = HISTORY_MESSAGES, drop=None, log=default_log, collected: list | None = None,
 ) -> list[Path]:
     """`threads/<channel>/<topic>.md` per conversation, ids kept, ✔ followed,
-    an unreadable one written as such. Returns the paths written."""
+    an unreadable one written as such. Returns the paths written.
+
+    `collected`, when given, receives one `agag.continuation.Remote` per
+    conversation with the same read — so the continuation view is built
+    from the bytes the files hold, and nothing is read twice."""
+    from agag.continuation import Remote
+    from agag.selfnote import Conversation
+
     written: list[Path] = []
     for channel, topic in conversations:
         if not channel or not topic or "/" in channel or "/" in topic or topic in {".", ".."}:
@@ -116,4 +123,6 @@ def write_evidence_threads(
             encoding="utf-8",
         )
         written.append(path)
+        if collected is not None:
+            collected.append(Remote(Conversation(channel, topic), list(messages), live, unavailable))
     return written

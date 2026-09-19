@@ -101,7 +101,9 @@ from agag.topics import (
     write_threads,
 )
 from agag import serving as serving_record
+from agag.continuation import continuation_view, Remote
 from agag.execopt import Selection
+from agag.listen import current_mirror
 from agag.reply import repair_with
 from agag.intro import write_agents_md
 from agag.selfnote import Conversation
@@ -178,6 +180,7 @@ __all__ = [
     "ZULIP_ENV",
     "ListenerError",
     "continue_deliveries",
+    "continuation_for",
     "front_prompt",
     "guide",
     "handle_mention",
@@ -213,9 +216,54 @@ def role_for(channel: str, topic: str) -> str:
     return DESK_ROLE if topic.startswith(FRONT_DESK_PREFIX) else FRONT_ROLE
 
 
+def continuation_for(context, chatlog_text: str, remotes: list[Remote], *, drop=is_ack) -> str:
+    """The continuation view for this serving (`agag.continuation`), from
+    the evidence already in hand: the history as read, the last delivered
+    serving of this home from the journal, the served marks off the
+    listener's mirror, the interrupted previous serving, the thread
+    snapshots, and what the carried conversation left out."""
+    journal = getattr(context, "journal", None)
+    last = journal.last_delivered_for(context.channel, context.topic) if journal is not None else None
+    mirror = current_mirror()
+    if mirror is not None and mirror.self_id is not None:
+        from agag.listen import Listener  # the marks reader, over the same index
+
+        marks = Listener.served_marks(_MirrorMarks(mirror))
+        for remote in remotes:
+            remote.served_up_to = marks.get(remote.conversation.as_pair(), 0)
+    brought_by = None
+    extra = tuple(getattr(context, "extra_threads", ()) or ())
+    if extra:
+        channel, topic = extra[0]
+        for remote in remotes:
+            if remote.conversation.as_pair() == (channel, topic):
+                newest = max((int(m.get("id") or 0) for m in remote.messages if m.get("sender_id") != context.self_id),
+                             default=0)
+                brought_by = (channel, topic, newest)
+    history = [m for m in context.history
+               if not (m.get("sender_id") == context.self_id and drop is not None and drop(str(m.get("content", "")).strip()))]
+    from agag.topics import omitted_from
+
+    return continuation_view(
+        history, context.self_id,
+        last_input_up_to=last.input_up_to if last is not None else None,
+        last_delivered_id=last.delivered_id if last is not None else None,
+        remotes=remotes, brought_by=brought_by, interrupted=getattr(context, "previous", None),
+        omitted_count=omitted_from(chatlog_text),
+    )
+
+
+class _MirrorMarks:
+    """Just enough of a `Listener` for `served_marks`: the mirror and this bot's id."""
+
+    def __init__(self, mirror):
+        self.mirror = mirror
+        self.self_id = mirror.self_id
+
+
 def front_prompt(
     bot_name: str, threads=(), root: Path | None = None, role: str = FRONT_ROLE,
-    *, conversation: str = "",
+    *, conversation: str = "", continuation: str = "",
 ) -> str:
     """The conversation, the placement lines, then the role's guide.
 
@@ -240,9 +288,12 @@ def front_prompt(
     if conversation:
         lines.append("")
         lines.append(conversation)
-    # The reply mark (`agag.reply`), described once after the guide: what
-    # is posted is what the run marks, and the rest of its output is its own.
-    return prompt_with_guide(lines, guide(role, "guide.md"), reply=True)
+    if continuation:
+        lines.append("")
+        lines.append(continuation)
+    # The reply mark (`agag.reply`) and the carry-forward block
+    # (`agag.continuation`), described once after the guide.
+    return prompt_with_guide(lines, guide(role, "guide.md"), reply=True, continuation=bool(continuation))
 
 
 def run_front(
@@ -320,10 +371,19 @@ def serve(context) -> TopicResult:
     for pair in getattr(context, "extra_threads", ()):
         if pair not in remotes:
             remotes.append(pair)
+    snapshots: list[Remote] = []
     if evidence:
-        threads = write_evidence_threads(context.client, front_dir, remotes, context.self_id, drop=is_ack)
+        threads = write_evidence_threads(context.client, front_dir, remotes, context.self_id, drop=is_ack,
+                                         collected=snapshots)
     else:
         threads = write_threads(context.client, front_dir, remotes, context.self_id, drop=is_ack)
+        snapshots = [Remote(Conversation(*pair)) for pair in remotes]
+        for remote in snapshots:
+            try:
+                remote.messages = context.client.topic_history(remote.conversation.channel, remote.conversation.topic,
+                                                               num_before=HISTORY_MESSAGES)
+            except Exception as error:  # noqa: BLE001 - the view says it is unknown
+                remote.unavailable = f"{type(error).__name__}: {error}"
 
     context.step = "harvest"
     write_agents_md(context.client, front_dir)
@@ -336,8 +396,10 @@ def serve(context) -> TopicResult:
 
     context.step = role
     home = (context.channel, context.topic)
+    carried = conversation_context(chatlog)
     output = run_front(
-        front_prompt(context.bot_name, threads, front_dir, role, conversation=conversation_context(chatlog)),
+        front_prompt(context.bot_name, threads, front_dir, role, conversation=carried,
+                     continuation=continuation_for(context, carried, snapshots)),
         front_dir,
         home,
         role,
