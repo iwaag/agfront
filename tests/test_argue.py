@@ -73,17 +73,30 @@ class Client:
         return 900 + len(self.calls)
 
 
+def marked(answer: str) -> str:
+    """A stub run's output under the reply contract (`agag.reply`): the
+    answer inside an `ag-reply` mark, after a line of the run's own, unless
+    the test wrote the marks itself."""
+    if "```ag-reply" in answer:
+        return answer
+    return f"thinking about it first.\n\n```ag-reply\n{answer}\n```"
+
+
 def wire(monkeypatch, tmp_path, calls, *, answer="on it"):
     monkeypatch.setattr(zulip_listener, "TOPICS_ROOT", tmp_path / "topics")
     monkeypatch.setattr(zulip_listener, "RECORDS_ROOT", tmp_path / "records")
+    monkeypatch.setattr(
+        topics, "deliver",
+        lambda client, channel, topic, text, **kwargs: (calls.append(("reply", channel, topic, text)) or 900),
+    )
     monkeypatch.setattr(
         topics, "topic_write",
         lambda topic, text, **kwargs: (calls.append(("reply", kwargs.get("channel"), topic, text)) or "success"),
     )
 
-    def front_run(prompt, cwd, home, role="front", *, extra_meta=None, selection=None):
+    def front_run(prompt, cwd, home, role="front", *, extra_meta=None, selection=None, journal=None):
         calls.append(("run", prompt, cwd, home, role, extra_meta))
-        return answer
+        return marked(answer)
 
     monkeypatch.setattr(zulip_listener, "run_front", front_run)
     guides = tmp_path / "guides"
@@ -299,3 +312,33 @@ def test_a_callback_into_an_argue_home_is_served_by_the_argue_role(monkeypatch, 
     assert "threads/pj-aquafactory/workplan-setup-aquafactory.md" in run[1]
     # Home is Front's own topic, so the ack is fine there; the reply carries no mention.
     assert [r[3] for r in replies(calls)] == [zulip_listener.ACK_TEXT, "autolab says the workspace exists."]
+
+
+# --- the reply mark, at the source of the doubled turn (`explicit_reply` p1) ---
+
+
+def test_7222_marked_posts_only_the_reply_and_the_rendering_sees_only_that(monkeypatch, tmp_path):
+    """The advice's example: Front's #7222 was two paragraphs of thought and
+    then the reply, in one post, and the Arguing Room voiced both. Under the
+    contract the thought stays in the run record and the posted speech —
+    what `present` re-voices — is the reply alone, with the argue's system
+    notice after it."""
+    from pathlib import Path as _Path
+
+    from agfront.present import plain_content
+
+    observed = (_Path(__file__).parent / "fixtures" / "reply" / "7222.md").read_text(encoding="utf-8")
+    thought, _, said = observed.partition("Let me post a reply asking for that.\n\n")
+    output = f"{thought}Let me post a reply asking for that.\n\n```ag-reply\n{said.strip()}\n```\n\n```ag-argue\ndesire: 92\n```"
+    calls = []
+    wire(monkeypatch, tmp_path, calls, answer=output)
+    history = [message(sender_id=BOT_ID, name="Front", content=argue_note(Conversation("front", "front-a")), id=90),
+               message(content="Is the world getting better or worse? I want the agents to find out.", id=92)]
+    client = Client(calls, history)
+    client.humans = {HUMAN_ID}
+    argue_module.handle_argue(client, CHANNEL, TOPIC)
+    posted = replies(calls)[-1][3]
+    assert posted.startswith("Is the following a fair statement"), "the thought is not in the post"
+    assert "before I draft anything" not in posted and "Let me post a reply" not in posted
+    assert posted.endswith("— the desire is on record as message 92.")
+    assert plain_content(posted) == posted, "nothing for the renderer to strip: the post is the speech"

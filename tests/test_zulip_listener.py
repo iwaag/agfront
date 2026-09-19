@@ -23,6 +23,7 @@ from dataclasses import replace
 
 import pytest
 from agag import topics
+from agag.reply import REPLY_GUIDE
 from agag.topics import GuideError
 
 from agag import intro as agents_md
@@ -97,9 +98,26 @@ class Client:
         return 900
 
 
+def marked(answer: str) -> str:
+    """A stub run's output under the reply contract (`agag.reply`): the
+    answer inside an `ag-reply` mark, after a line of the run's own, unless
+    the test wrote the marks itself."""
+    if "```ag-reply" in answer:
+        return answer
+    return f"thinking about it first.\n\n```ag-reply\n{answer}\n```"
+
+
 def wire(monkeypatch, tmp_path, calls, *, answer="on it", run=None):
     monkeypatch.setattr(zulip_listener, "TOPICS_ROOT", tmp_path / "topics")
     monkeypatch.setattr(zulip_listener, "RECORDS_ROOT", tmp_path / "records")
+    monkeypatch.setattr(
+        topics,
+        "deliver",
+        lambda client, channel, topic, text, **kwargs: (
+            calls.append(("reply", channel, topic, text)) or 900
+        ),
+    )
+    # The execution-command answers still go through `topic_write`.
     monkeypatch.setattr(
         topics,
         "topic_write",
@@ -108,11 +126,11 @@ def wire(monkeypatch, tmp_path, calls, *, answer="on it", run=None):
         ),
     )
 
-    def front_run(prompt, cwd, home, role="front", *, extra_meta=None, selection=None):
+    def front_run(prompt, cwd, home, role="front", *, extra_meta=None, selection=None, journal=None):
         calls.append(("front", prompt, cwd, home, role, extra_meta, selection))
         if run is not None:
             run(cwd)
-        return answer
+        return marked(answer)
 
     monkeypatch.setattr(zulip_listener, "run_front", front_run)
     guides = tmp_path / "guides"
@@ -151,8 +169,9 @@ def test_the_run_s_answer_is_the_reply_and_nothing_is_posted_elsewhere(monkeypat
     # read is the post-run re-check.
     assert [call[0] for call in calls] == [
         "whoami", "whoami", "history", "reply", "front",
-        # the handoff lookup, the reply, then the post-run re-check
-        "history", "reply", "history",
+        # the reply (the requester is read from the processed input, not
+        # looked up at send time), then the post-run re-check
+        "reply", "history",
     ]
     assert {call[1] for call in calls if call[0] == "reply"} == {CHANNEL}
     assert replies(calls)[-1] == "@**Developer**\n\nForge can do this. May I ask it?"
@@ -171,6 +190,7 @@ def test_the_chatlog_and_the_prompt_are_the_run_s_whole_input(monkeypatch, tmp_p
         "\n"
         + topics.conversation_context(f"[Developer] {REQUEST}\n")
         + "\n\nFRONT GUIDE"
+        + f"\n\n{REPLY_GUIDE}"
     )
     assert cwd == gen_dir(tmp_path, 1)
     # The same bytes are in the file and in the prompt: one rendering, one

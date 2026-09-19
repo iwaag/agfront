@@ -459,14 +459,13 @@ def wire_live(monkeypatch, tmp_path, calls, client_box, **kw):
     wire_runs(monkeypatch, tmp_path, calls, **kw)
     from agag import topics as shared_topics
 
-    def reply(topic, text, **kwargs):
-        channel = kwargs.get("channel")
+    def reply(client, channel, topic, text, **kwargs):
         calls.append(("reply", channel, topic, text))
         if client_box:
             client_box[0].append(channel, topic, text)
-        return "success"
+        return 900
 
-    monkeypatch.setattr(shared_topics, "topic_write", reply)
+    monkeypatch.setattr(shared_topics, "deliver", reply)
 
 
 def desk_runs(calls):

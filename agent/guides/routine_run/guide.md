@@ -175,4 +175,4 @@ fenced block** in exactly this shape, after your entry:
 
 # Last thing
 
-Your reply is posted as it is. Begin with the first word of your entry.
+Your entry is what you mark as the reply; it is posted for you.

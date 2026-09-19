@@ -50,6 +50,7 @@ from agag.argue import (
     validate_desire,
 )
 from agag.entrance import EMPTY_REPLY
+from agag.reply import repair_with
 from agag.intro import write_agents_md
 from agag.selfnote import Conversation, is_speech, note
 from agag.topics import (
@@ -92,7 +93,7 @@ def argue_prompt(bot_name: str, conversation: str, anchor: Anchor | None, desire
     if placement := threads_placement(threads, workspace or Path(".")):
         lines.append(placement)
     lines += ["", conversation]
-    return prompt_with_guide(lines, front.guide(ARGUE_ROLE, "guide.md"))
+    return prompt_with_guide(lines, front.guide(ARGUE_ROLE, "guide.md"), reply=True)
 
 
 def humans_of(client: ZulipClient) -> set[int]:
@@ -126,14 +127,19 @@ def serve_argue(context) -> TopicResult:
     write_agents_md(context.client, workspace)
 
     context.step = ARGUE_ROLE
+    home = (context.channel, context.topic)
+    meta = {"argue": anchor.message_id} if anchor else None
     output = front.run_front(
         argue_prompt(context.bot_name, conversation_context(chatlog), anchor, desire, context.history,
                      threads=threads, workspace=workspace),
-        workspace, (context.channel, context.topic), ARGUE_ROLE,
-        extra_meta={"argue": anchor.message_id} if anchor else None,
-        selection=context.selection,
+        workspace, home, ARGUE_ROLE, extra_meta=meta, selection=context.selection, journal=getattr(context, "journal", None),
     )
 
+    # The machine block is read from the whole output, wherever it is, and
+    # its effects are applied here, once. The reply is then the rest of the
+    # output under the reply contract (`agag.reply`): only its marked text
+    # is posted, and the notes below follow it as system notices, so the
+    # mark can neither swallow them nor be swallowed by the block.
     context.step = "block"
     text, fields, error = split_block(output)
     notes: list[str] = []
@@ -146,8 +152,11 @@ def serve_argue(context) -> TopicResult:
         context.step = "outcome"
         finished, line = complete(context, fields, anchor, desire)
         notes.append(line)
-    body = "\n\n".join(part for part in [text, *notes] if part)
-    return TopicResult([body or EMPTY_REPLY], resolve_after=finished)
+    return TopicResult(
+        output=text, notices=notes, resolve_after=finished,
+        repair=repair_with(lambda prompt: front.run_front(prompt, workspace, home, ARGUE_ROLE, extra_meta=meta,
+                                                          selection=context.selection), text),
+    )
 
 
 def outcome_note(kind: str, target: str) -> str:

@@ -101,6 +101,7 @@ from agag.topics import (
     write_threads,
 )
 from agag.execopt import Selection
+from agag.reply import repair_with
 from agag.intro import write_agents_md
 from agag.selfnote import Conversation
 from agag.zulip import (
@@ -237,12 +238,14 @@ def front_prompt(
     if conversation:
         lines.append("")
         lines.append(conversation)
-    return prompt_with_guide(lines, guide(role, "guide.md"))
+    # The reply mark (`agag.reply`), described once after the guide: what
+    # is posted is what the run marks, and the rest of its output is its own.
+    return prompt_with_guide(lines, guide(role, "guide.md"), reply=True)
 
 
 def run_front(
     prompt: str, cwd: Path, home: tuple[str, str], role: str = FRONT_ROLE,
-    *, extra_meta: dict | None = None, selection: Selection | None = None,
+    *, extra_meta: dict | None = None, selection: Selection | None = None, journal=None,
 ) -> str:
     """One run of `role` in the topic workspace, with its `ag.agent-run.v1` record.
 
@@ -250,9 +253,13 @@ def run_front(
     posts elsewhere is recorded against it, so the answer comes back here.
     The record is filed under the role, so a Front Desk run is told apart
     from an ordinary front run by where its record is. `extra_meta` is
-    stamped into the record.
+    stamped into the record. `journal` (the serving's record, `agag.serving`)
+    is told where the run record is, so the reply and delivery outcome are
+    written beside the run identity once the reply is posted.
     """
     record = next_record_path(RECORDS_ROOT / role)
+    if journal is not None:
+        journal.record(str(record))
     output, _, exit_code = run_role(
         SPEC,
         role,
@@ -326,39 +333,48 @@ def serve(context) -> TopicResult:
         write_budget_doc(front_dir)
 
     context.step = role
+    home = (context.channel, context.topic)
     output = run_front(
         front_prompt(context.bot_name, threads, front_dir, role, conversation=conversation_context(chatlog)),
         front_dir,
-        (context.channel, context.topic),
+        home,
         role,
         # Front's own execution option, frozen for this serving. Asking
         # another agent to run *its* work a certain way is a different
         # decision, made in that agent's own topic (`agentchat use`).
         selection=context.selection,
+        journal=getattr(context, "journal", None),
     )
+    # One repair, when the output carries no usable reply mark: the same
+    # role, asked for the reply alone with its previous output in front of
+    # it (`agag.reply.repair_prompt`), nothing else.
+    repair = repair_with(lambda prompt: run_front(prompt, front_dir, home, role, selection=context.selection), output)
     if run:
-        return finish_run(context, output)
-    # A desk reply is posted as written, like any other: the scene the screen
-    # plays is rendered from it afterwards (`agfront.render`), never by this run.
-    return TopicResult([output])
+        return finish_run(context, output, repair)
+    # A desk or front reply is what the run marked (`agag.reply`): the scene
+    # the screen plays is rendered from the posted text afterwards
+    # (`agfront.render`), never by this run — and only the posted text.
+    return TopicResult(output=output, repair=repair)
 
 
-def finish_run(context, output: str) -> TopicResult:
+def finish_run(context, output: str, repair=None) -> TopicResult:
     """A run serving's post, and — when the run said it ends — its delivery.
 
     The reply is the run's own record and is posted at home whatever else
-    happens. A usable `ag-routinerun` block ends the run: the report goes to
-    the conversation that opened the run (the origin the topic's root note
-    names; the run topic itself when it was opened by hand), naming the run,
-    and the run topic is resolved after the record. An unusable block is
-    recorded as such and the run stays open.
+    happens: its marked text (`agag.reply`), then the canonical block or
+    the error fence as literal sections. A usable `ag-routinerun` block
+    ends the run: the report goes to the conversation that opened the run
+    (the origin the topic's root note names; the run topic itself when it
+    was opened by hand), naming the run, and the run topic is resolved
+    after the record. An unusable block is recorded as such and the run
+    stays open.
     """
     context.step = "finish"
     reply, finish, error = split_finish(output)
     if error is not None:
         log(f"finish block unusable: {error}")
     if finish is None:
-        return TopicResult([record_text(reply, None, error)])
+        return TopicResult(output=reply, sections=[record_text("", None, error)], repair=repair)
     run = Conversation(context.channel, context.topic)
     origin = origin_of(context.history, context.self_id)
     if origin is not None and origin != run:
@@ -375,10 +391,10 @@ def finish_run(context, output: str) -> TopicResult:
         # with the report and no handoff, rather than a handoff and no report.
         context.client.send_to_channel(origin.channel, name, delivered_note(run))
         log(f"delivered the run's report to {origin}")
-        record = record_text(reply, finish, None)
+        sections = [record_text("", finish, None)]
     else:
-        record = "\n\n".join(s for s in (record_text(reply, finish, None), delivery_text(finish, run)) if s)
-    return TopicResult([record], resolve_after=True)
+        sections = [record_text("", finish, None), delivery_text(finish, run)]
+    return TopicResult(output=reply, sections=sections, resolve_after=True, repair=repair)
 
 
 def handle_topic(client: ZulipClient, channel: str, topic: str, *, depth: int = 0) -> None:
