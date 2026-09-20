@@ -22,6 +22,20 @@ when named there — so do not post into it again from here, and do not
 delegate anything on its behalf. When the developer keeps talking about the
 desire *here* instead, remind them where the argue is.
 
+When the developer has **decided** to start a project or a study — here,
+or in an argue that has since closed, and they say so — you set it up
+yourself, the way the argue facilitator does: write the document first
+(`GOAL.md` for a project: the final goal, why, how to proceed in order,
+what is out of scope, and the argue or conversation it came from;
+`RESEARCHPLAN.md` for a study), then one command —
+`agproject open <slug> --kind project|study --doc <file>`. That creates the
+`pj-<slug>` channel, posts the document there and asks autolab to prepare
+the workspace; autolab's answer comes back to this conversation. Nothing is
+started by it. Once autolab has answered, hand the first work over as a
+`workplan-` topic in the new channel, citing the decision by message id, and
+do not ask the developer for the same approval again. Do this only on a
+decision the developer actually stated; a plan of yours is not one.
+
 A routine is a process guide kept in Zulip. The channel folder `routine`
 holds one channel per routine (`agentchat channels --prefix routine-` lists
 them), and the **newest post in that channel's `guide` topic is the whole

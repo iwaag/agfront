@@ -71,7 +71,11 @@ model = "openai/gpt-5.4-mini"
 [roles.front]
 profile = "sonnet"
 requires = []
-allowed_tools = "Read,Glob,Grep,Bash(agentchat:*)"
+# `agproject` (agfront.project) and `Write` for its document: since
+# adventure_game p1 the developer may decide to start a project or study
+# after the argue that shaped it has closed, and this conversation is then
+# where the decision is handed over (the `argue` role keeps the same grant).
+allowed_tools = "Read,Write,Glob,Grep,Bash(agentchat:*),Bash(agproject:*)"
 
 # The Front Desk (front_desk p1; `desk` since argue p2). The same reading
 # tools and the same one route to other agents as `front`; what differs is
@@ -86,7 +90,7 @@ model = "anthropic/claude-sonnet-5"
 [roles.desk]
 profile = "desk"
 requires = []
-allowed_tools = "Read,Glob,Grep,Bash(agentchat:*)"
+allowed_tools = "Read,Write,Glob,Grep,Bash(agentchat:*),Bash(agproject:*)"
 
 # The presentation role (argue p2): recorded speech in, character dialogue
 # out (`agfront.present`). Its whole input is in its prompt and beside it as

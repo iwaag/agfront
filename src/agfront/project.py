@@ -104,14 +104,21 @@ def _document(path: str) -> str:
     return text
 
 
+def _origin_word(home: Conversation) -> str:
+    """The conversation a project grew out of is usually an argue; since
+    adventure_game p1 it may be the developer's own `front-` conversation,
+    where a decision taken after the argue closed is handed over."""
+    return "argue" if home.channel == "argue" else "conversation"
+
+
 def _origin_line(home: Conversation | None) -> str:
-    return f"Opened from argue **#{home.channel} › {home.topic}**." if home else "Opened by hand (no argue named)."
+    return f"Opened from {_origin_word(home)} **#{home.channel} › {home.topic}**." if home else "Opened by hand (no argue named)."
 
 
 def setup_request(slug: str, kind: str, doc_topic: str, home: Conversation | None) -> str:
     """What autolab is asked, in a `workplan-setup-` topic: prepare, never run."""
     where = f"#{project_channel(slug)} › {doc_topic}"
-    origin = f" It grew out of argue #{home.channel} › {home.topic}." if home else ""
+    origin = f" It grew out of {_origin_word(home)} #{home.channel} › {home.topic}." if home else ""
     if kind == "study":
         layout = (
             "Set it up on the **study** pattern (`autolab doc patterns`): `main/` on the standard internal "
@@ -152,7 +159,7 @@ def open_project(
     self_id = int(client.whoami()["user_id"])
     autolab = autolab_bot(client)
     principals = sorted({*admin.realm_owners(), self_id, *([autolab] if autolab is not None else [])})
-    origin = f"argue {home}" if home else "an argue"
+    origin = f"{_origin_word(home)} {home}" if home else "an argue"
     description = f"[AUTO] project: {slug}; {kind}; opened from {origin}; its goal is the `{GOAL_TOPIC if kind == 'project' else PLAN_TOPIC_PREFIX + slug}` topic"
     folder = admin.channel_folder_by_name(name)
     folder_id = int(folder["id"]) if folder else admin.create_channel_folder(name, f"{slug} project channel and its work channels")
