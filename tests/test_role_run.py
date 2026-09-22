@@ -24,14 +24,18 @@ def test_front_s_grant_is_reading_agentchat_and_agproject():
     another agent — with no general shell. Since adventure_game p1 it also
     carries `agproject` and the file writer its document needs, so a decision
     the developer takes after an argue closed can be set up from here. The
-    schedule-only CLI it once carried is gone (`refine_routine` p1)."""
+    schedule-only CLI it once carried is gone (`refine_routine` p1). Since
+    adventure_game p2 it reads human-authored references with `agrefs`, so
+    a reference the developer names travels on as `<source>@<rev>:<path>`."""
     config, overlay = load_config(SPEC.agents_config, Path("/nonexistent"))
     grant = resolve_role(config, overlay, "front", check_available=False).allowed_tools
     assert "Bash(agentchat:*)" in grant
     assert "Bash(agproject:*)" in grant
     assert "Write" in grant
     assert "rtschedule" not in grant
+    assert "Bash(agrefs:*)" in grant
     remaining = grant.replace("Bash(agentchat:*)", "").replace("Bash(agproject:*)", "")
+    remaining = remaining.replace("Bash(agrefs:*)", "")
     assert "Bash(" not in remaining
 
 
