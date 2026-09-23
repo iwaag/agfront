@@ -363,7 +363,8 @@ def serve(context) -> TopicResult:
     context.step = "threads"
     remotes = [
         conversation.as_pair()
-        for conversation in remotes_for_home(context.client, context.channel, context.topic)
+        for conversation in remotes_for_home(context.client, context.channel, context.topic,
+                                          home_messages=context.history)
     ]
     # A callback reached through the `replaces` relation comes from a topic
     # Front has never posted in, so no root note of ours names it and
@@ -455,7 +456,12 @@ def finish_run(context, output: str, repair=None) -> TopicResult:
         context.step = "delivery"
         # Directly, never through `agentchat`: a root note pointing at the
         # run must not be written into the requester's conversation.
-        name = live_topic_name(context.client, origin.channel, origin.topic)
+        # Located by the note's anchor when it has one (robust_workflow p2
+        # step 2): a renamed origin still gets its report, a new request that
+        # took the name does not.
+        located = locate(context.client, origin) if origin.anchor else None
+        name = located.topic if located is not None else live_topic_name(context.client, origin.channel,
+                                                                          origin.topic)
         context.client.send_to_channel(origin.channel, name, delivery_text(finish, run))
         # …and, right after it, the note that says a report is sitting there
         # unread. The delivery is Front's own speech, so the sweeps will never

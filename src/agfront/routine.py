@@ -276,8 +276,15 @@ def recover_unstarted_runs(client: ZulipClient, self_id: int, *, lookback: int =
 
 
 def origin_of(history: list[dict], self_id: int) -> Conversation | None:
-    """The conversation this run was opened from, or None for a hand-opened run."""
-    return own_rootchat(history, self_id)
+    """The conversation this run was opened from, or None for a hand-opened run.
+
+    The one rule every root-note reader follows (`effective_rootchat`): a
+    deliberate `[rootchat-moved]` wins over the earliest ordinary note —
+    this used to read the earliest note only, so a corrected run still
+    reported to the conversation that opened it by mistake."""
+    from agag.selfnote import effective_rootchat
+
+    return effective_rootchat(history, self_id)
 
 
 # --- finishing ---------------------------------------------------------------

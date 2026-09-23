@@ -120,7 +120,8 @@ def serve_argue(context) -> TopicResult:
                               history_messages=HISTORY_MESSAGES)
     chatlog_path(workspace).write_text(chatlog, encoding="utf-8")
     context.step = "threads"
-    remotes = [c.as_pair() for c in remotes_for_home(context.client, context.channel, context.topic)]
+    remotes = [c.as_pair() for c in remotes_for_home(context.client, context.channel, context.topic,
+                                          home_messages=context.history)]
     for pair in getattr(context, "extra_threads", ()):
         if pair not in remotes:
             remotes.append(pair)
