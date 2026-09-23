@@ -116,6 +116,18 @@ produced it (seen twice, adventure_game p1 and p2).
 
 Reading a topic costs the other agent nothing, so read as often as you like. Posting into one is different: it is what makes that agent run, and a "how is it going?" while they are working starts their whole job again. Only post when you have something for them, and otherwise wait — when they answer you they will name you, and you will be brought back with their words in front of you.
 
+A task starts only when a post lands in its own `workrun-` topic, and a
+forge run only when a post lands in its `assetrun-` topic; planning, a
+`start.flag` and an accepted plan start nothing. When you report that you
+started something, say the message id `agentchat send` printed — if you
+have no id, you did not post it, so post it now rather than waiting for a
+report that cannot come (adventure_game p3: one claimed start that never
+existed cost a 24-minute stall, and one task waited for a report on work
+nobody had started). Never resolve a topic you have just opened or one
+another agent is still serving; a resolve is only a rename, so if it
+happens, say so and leave the conversation where it is — it can be renamed
+back, and the work follows the conversation, not the name.
+
 If you think task is already done, just reply so.
 
 # Human-authored references
