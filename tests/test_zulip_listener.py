@@ -963,3 +963,38 @@ def test_an_unavailable_harness_is_not_reported_as_a_wrong_declaration(monkeypat
     published = front_instance.SPEC.published_options("Front")
     assert published.get("default").pool not in ("", "-")
     assert front_instance.SPEC.pool_diagnostics() == ()
+
+
+def test_a_request_whose_topic_was_resolved_reads_finished_not_awaiting(monkeypatch, tmp_path):
+    """robust_workflow p1 D1: the ordinary role's continuation read each
+    remote by its bare name, so a task autolab had closed (✔) read as empty
+    and every later serving was told "awaiting a reply to your post" about
+    work that was finished — while `threads/` beside it followed the rename."""
+    calls = []
+    wire(monkeypatch, tmp_path, calls)
+    resolved = "✔ workrun-task1-m7"
+
+    class Delegated(Client):
+        def own_rootchat_notes(self, num_before=200):
+            return [{
+                "id": 50, "type": "stream", "sender_id": BOT_ID, "display_recipient": "work-m7",
+                "subject": resolved, "content": rootchat_note(Conversation(CHANNEL, TOPIC)),
+            }]
+
+        def topic_history(self, channel, topic, num_before):
+            if channel == "work-m7":
+                self.calls.append(("history", channel, topic, num_before))
+                if topic != resolved:
+                    return []
+                return [
+                    {"id": 51, "sender_id": BOT_ID, "sender_full_name": "Front", "subject": resolved,
+                     "display_recipient": channel, "content": "Start task 1."},
+                    {"id": 52, "sender_id": 11, "sender_full_name": "autolab", "subject": resolved,
+                     "display_recipient": channel, "content": "@**Front** task 1 is done."},
+                ]
+            return super().topic_history(channel, topic, num_before)
+
+    zulip_listener.handle_topic(Delegated(calls), CHANNEL, TOPIC)
+    prompt = next(call[1] for call in calls if call[0] == "front")
+    assert "#work-m7 › workrun-task1-m7: finished (✔)" in prompt
+    assert "awaiting a reply" not in prompt

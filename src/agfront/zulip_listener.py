@@ -117,6 +117,7 @@ from agag.zulip import (
     note_served,
     remotes_for_home,
     rootchat_home,
+    topic_history_across_resolve,
 )
 
 from .budget import write_budget_doc
@@ -379,9 +380,18 @@ def serve(context) -> TopicResult:
         threads = write_threads(context.client, front_dir, remotes, context.self_id, drop=is_ack)
         snapshots = [Remote(Conversation(*pair)) for pair in remotes]
         for remote in snapshots:
+            # Across the ✔ rename, like the threads files beside it: a task
+            # autolab closed is read under its resolved name, or every
+            # finished request reads "awaiting a reply" in the continuation
+            # view (robust_workflow p1 step 1, D1 — seen in every serving of
+            # adventure_game p3 after the first task closed).
             try:
-                remote.messages = context.client.topic_history(remote.conversation.channel, remote.conversation.topic,
-                                                               num_before=HISTORY_MESSAGES)
+                remote.messages = topic_history_across_resolve(
+                    context.client, remote.conversation.channel, remote.conversation.topic,
+                    HISTORY_MESSAGES, strict=True,
+                )
+                if remote.messages:
+                    remote.live_name = str(remote.messages[-1].get("subject") or remote.conversation.topic)
             except Exception as error:  # noqa: BLE001 - the view says it is unknown
                 remote.unavailable = f"{type(error).__name__}: {error}"
 
