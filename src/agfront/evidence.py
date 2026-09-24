@@ -28,6 +28,7 @@ import time
 from pathlib import Path
 
 from agag.selfnote import is_selfnote
+from agag.serving import note_input
 from agag.topics import HISTORY_MESSAGES, threads_dir
 from agag.zulip import RESOLVED_TOPIC_PREFIX, ZulipClient, ZulipError, log as default_log
 
@@ -123,6 +124,10 @@ def write_evidence_threads(
             encoding="utf-8",
         )
         written.append(path)
+        if unavailable is None:
+            # What this serving is handed, for the receipts written after its
+            # reply is delivered (robust_workflow p3 step 4).
+            note_input(channel, topic, messages, complete=len(messages) < history_messages)
         if collected is not None:
             collected.append(Remote(Conversation(channel, topic), list(messages), live, unavailable))
     return written
