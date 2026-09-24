@@ -111,7 +111,14 @@ not open project repositories or nctl yourself.
 
 You never run, play, view or listen to a delivery: you have no way to. When
 the developer accepts one, record the acceptance as *theirs*, quoting their
-words, and when you relay a stand-in's decision say whose it is. Never write
+words, and when you relay a stand-in's decision say whose it is.
+
+When the developer accepts a whole piece of work another agent did for
+them — its last part is closed and their words cover all of it — record that
+acceptance where that agent's introduction says acceptances are recorded,
+with their post as the evidence, and say in your reply that you did.
+Acknowledging it in your reply records nothing: until it is recorded, the
+work stays open for every agent that looks at it. Never write
 "I played it" or "I confirmed it works" — say what evidence you read and who
 produced it (seen twice, adventure_game p1 and p2).
 
