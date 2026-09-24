@@ -297,7 +297,7 @@ def test_a_front_failure_names_its_step(monkeypatch, tmp_path):
     monkeypatch.setattr(zulip_listener, "run_front", explode)
     zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
     assert replies(calls)[-1] == (
-        "@**Developer**\n\nfailed during front: claude_code timed out"
+        "@**Developer**\n\nfailed during front: claude_code timed out\n\n`ag-post intent=report`"
     )
 
 
@@ -567,7 +567,7 @@ def test_a_front_desk_failure_names_its_role(monkeypatch, tmp_path):
 
     monkeypatch.setattr(zulip_listener, "run_front", explode)
     zulip_listener.handle_topic(Client(calls, history=[desk_message()]), CHANNEL, DESK_TOPIC)
-    assert replies(calls)[-1] == "@**Developer**\n\nfailed during desk: desk run exited 1"
+    assert replies(calls)[-1] == "@**Developer**\n\nfailed during desk: desk run exited 1\n\n`ag-post intent=report`"
 
 
 def test_the_desk_guide_exists_and_carries_no_character():
@@ -998,3 +998,18 @@ def test_a_request_whose_topic_was_resolved_reads_finished_not_awaiting(monkeypa
     prompt = next(call[1] for call in calls if call[0] == "front")
     assert "#work-m7 › workrun-task1-m7: finished (✔)" in prompt
     assert "awaiting a reply" not in prompt
+
+
+def test_the_evidence_says_what_each_post_is_and_hides_the_line():
+    from agfront.evidence import format_evidence
+
+    history = [
+        {"id": 1, "sender_id": 8, "sender_full_name": "Developer", "content": "build it", "timestamp": 0},
+        {"id": 2, "sender_id": 15, "sender_full_name": "Front", "timestamp": 0,
+         "content": "@**Developer**\n\nWhich one?\n\n`ag-post intent=response_request to=8 ask=question seen=1`"},
+        {"id": 3, "sender_id": 8, "sender_full_name": "Developer", "content": "B\n\n`ag-post re=2`", "timestamp": 0},
+    ]
+    text = format_evidence(history, 15, channel="front", topic="front-desk-x")
+    assert "ag-post" not in text
+    assert "asks Developer to answer (question); request #2" in text
+    assert "[Developer #3] sender 8" in text and "answers #2" in text

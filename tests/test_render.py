@@ -432,3 +432,16 @@ def test_an_edited_source_is_identifiable_and_rendered_again_only_on_request(wor
     world.tick()
     records = world.memo_records()
     assert len(records) == 2 and records[1]["source"]["fingerprint"] == current
+
+
+# --- what a post is for (clearer_chat_ui step 3) -----------------------------------
+
+
+def test_the_presenter_reads_the_words_and_the_meaning_never_the_line():
+    asking = "@**Developer**\n\nWhich palette?\n\n`ag-post intent=response_request to=8 ask=question seen=5`"
+    post = SourcePost(9, 15, Speaker(label="Front", agent="front", character="front"), asking)
+    assert present.plain_content(asking) == "Which palette?"
+    sources = present.sources_markdown([post], "front", "front-desk-x")
+    assert "ag-post" not in sources and "Which palette?" in sources
+    assert "this post is: asks user 8 to answer (question)" in sources
+    assert "ag-post" not in present.context_markdown([post])

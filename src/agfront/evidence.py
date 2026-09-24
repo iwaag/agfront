@@ -27,9 +27,10 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from agag.post import describe, parse_post
 from agag.selfnote import is_selfnote
 from agag.serving import note_input
-from agag.topics import HISTORY_MESSAGES, threads_dir
+from agag.topics import HISTORY_MESSAGES, sender_names, threads_dir
 from agag.zulip import RESOLVED_TOPIC_PREFIX, ZulipClient, ZulipError, log as default_log
 
 __all__ = ["format_evidence", "write_evidence_threads"]
@@ -73,11 +74,19 @@ def format_evidence(
         lines.append(f"**Only the newest {history_messages} messages were fetched**; older posts exist. "
                      f"`agentchat read {channel} \"{topic}\" --since <id>` reads further.")
     lines.append("")
+    names = sender_names(messages)
     for message, content, own in shown:
         speaker = message.get("sender_full_name") or f"user{message.get('sender_id')}"
         who = f"{speaker} (you)" if own else speaker
-        lines.append(f"[{who} #{message.get('id')}] sender {message.get('sender_id')} · {_stamp(message.get('timestamp'))}")
-        lines.append(content)
+        # What the post is for (`agag.post`) is said in its header; the
+        # machine line itself is never shown, so no run learns to type it.
+        parsed = parse_post(content)
+        meaning = describe(parsed.meta, names.get)
+        if meaning and parsed.meta.intent == "response_request":
+            meaning = f"{meaning}; request #{message.get('id')}"
+        lines.append(f"[{who} #{message.get('id')}] sender {message.get('sender_id')} · {_stamp(message.get('timestamp'))}"
+                     + (f" · {meaning}" if meaning else ""))
+        lines.append(parsed.text)
         lines.append("")
     return "\n".join(lines).rstrip("\n") + "\n"
 

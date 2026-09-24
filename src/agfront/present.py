@@ -38,6 +38,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
+from agag.post import describe, parse_post, strip as strip_post
 from agag.agent import is_ack
 from agag.argue import speaker_of
 from agag.memo import DIALOGUE_SCHEMA, fingerprint as shared_fingerprint
@@ -96,8 +97,10 @@ class SourcePost:
 
 def plain_content(content: str) -> str:
     """A post without its transport: the hand-off mention `serve_topic`
-    prefixes and the logical-speaker header."""
-    text = _HANDOFF.sub("", str(content or ""), count=1)
+    prefixes, the logical-speaker header and the `ag-post` line
+    (`agag.post`) — what a post is for is the source's, carried beside the
+    words, never re-voiced."""
+    text = _HANDOFF.sub("", strip_post(content), count=1)
     return _SPEAKER_HEADER.sub("", text.lstrip(), count=1).strip()
 
 
@@ -145,7 +148,8 @@ def sources_markdown(posts: list[SourcePost], channel: str, topic: str) -> str:
     for post in posts:
         who = (f"character `{post.speaker.character}`" if post.speaker.character
                else "no character — skip this post, it is shown as written")
-        lines.append(f"[{post.speaker.label} #{post.message_id}] {who}")
+        meaning = describe(parse_post(post.content).meta)
+        lines.append(f"[{post.speaker.label} #{post.message_id}] {who}" + (f" · this post is: {meaning}" if meaning else ""))
         lines.append(plain_content(post.content))
         lines.append("")
     return "\n".join(lines).rstrip("\n") + "\n"
