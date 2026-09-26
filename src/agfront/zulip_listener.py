@@ -497,6 +497,16 @@ def handle_topic(client: ZulipClient, channel: str, topic: str, *, depth: int = 
         continue_deliveries(client, depth=depth)
 
 
+def nested_serving():
+    """A conversation served from inside another serving — a run this one
+    opened, a requester a run reported to — gets a journal of its own.
+    Sharing the entry's journal moved its home: the receipt for the callback
+    that opened a run was written into the run (sage p2 step 5, #11550
+    marked served in `routinerun-20260926-2100` instead of the desk), and
+    Observer escalated an answer that had in fact been taken up."""
+    return serving_record.bound(serving_record.NullJournal())
+
+
 def start_opened_runs(
     client: ZulipClient, home: tuple[str, str], *, depth: int = 0
 ) -> list[tuple[str, str]]:
@@ -517,7 +527,8 @@ def start_opened_runs(
         if not unstarted(history, self_id):
             continue
         log(f"starting run {run} opened from {home[0]!r}/{home[1]!r}")
-        handle_topic(client, run.channel, run.topic, depth=depth)
+        with nested_serving():
+            handle_topic(client, run.channel, run.topic, depth=depth)
         started.append(run.as_pair())
     return started
 
@@ -549,7 +560,8 @@ def continue_deliveries(client: ZulipClient, *, depth: int = 0) -> list[tuple[st
     continued: list[tuple[str, str]] = []
     for home in pending_continuations(client, self_id):
         log(f"continuing {home}: a run reported there and nothing has served it")
-        handle_topic(client, home.channel, home.topic, depth=depth + 1)
+        with nested_serving():
+            handle_topic(client, home.channel, home.topic, depth=depth + 1)
         continued.append(home.as_pair())
     return continued
 

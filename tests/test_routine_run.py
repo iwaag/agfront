@@ -740,3 +740,28 @@ def test_a_finished_conversation_that_is_not_a_run_is_simply_left(monkeypatch, t
     posted = [c for c in calls if c[0] == "post"]
     assert [routine.parse_delivered(c[3]) for c in posted] == [None]
     assert all(c[3].startswith("[selfnote][served]") for c in posted)
+
+
+def test_a_run_started_inside_a_serving_does_not_take_over_its_journal(monkeypatch):
+    """sage p2 step 5: the callback serving that opened a run had its receipt
+    written into the run, because the run's serving shared its journal."""
+    from agag import serving as serving_record
+    from agag.selfnote import Conversation
+
+    outer = serving_record.NullJournal()
+    seen = []
+    monkeypatch.setattr(zulip_listener, "opened_runs", lambda client, home: [Conversation("routine-x", "routinerun-1")])
+    monkeypatch.setattr(zulip_listener, "unstarted", lambda history, self_id: True)
+    monkeypatch.setattr(zulip_listener, "handle_topic", lambda client, ch, t, depth=0: seen.append(serving_record.current()))
+
+    class Quiet:
+        def whoami(self):
+            return {"user_id": 15}
+
+        def topic_history(self, *a, **k):
+            return []
+
+    with serving_record.bound(outer):
+        zulip_listener.start_opened_runs(Quiet(), ("front", "front-desk-x"))
+        assert serving_record.current() is outer
+    assert seen and seen[0] is not outer
