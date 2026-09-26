@@ -15,6 +15,7 @@ import pytest
 from agag import topics
 from agag import intro as agents_md
 from agag.argue import argue_note, desire_note
+from agag.project import established_line
 from agag.selfnote import Conversation
 
 from agfront import argue as argue_module
@@ -215,6 +216,9 @@ class Realm(Client):
     def channel_topics(self, stream_id):
         return list(self.topic_names)
 
+    def channel_subscribers(self, stream_id):
+        return []
+
     def topic_last_id(self, channel, topic):
         return 1 if (topic == "goal" and self.goal) else 0
 
@@ -224,7 +228,8 @@ class Realm(Client):
         if topic.startswith("workplan-setup-"):
             rows = [message(sender_id=BOT_ID, name="Front", content="please set up", id=10)]
             if self.setup_answered:
-                rows.append(message(sender_id=OTHER_BOT, name="autolab", content="done: main/ exists", id=11))
+                rows.append(message(sender_id=OTHER_BOT, name="autolab", id=11, content=(
+                    "done: main/ exists\n\n" + established_line("http://gitea.example/autodev/x.git", "abc1234"))))
             return rows
         return super().topic_history(channel, topic, num_before)
 

@@ -70,7 +70,7 @@ from agag.zulip import RESOLVED_TOPIC_PREFIX, ZulipClient, live_topic_name, log,
 
 from . import zulip_listener as front
 from .evidence import format_evidence, write_evidence_threads
-from .project import GOAL_TOPIC, PLAN_TOPIC_PREFIX, PROJECT_CHANNEL_PREFIX, SETUP_TOPIC_PREFIX
+from agag.project import GOAL_TOPIC, PLAN_TOPIC_PREFIX, PROJECT_CHANNEL_PREFIX, SETUP_TOPIC_PREFIX, inspect_project
 
 ARGUE_ROLE = "argue"
 OUTCOME_TAG = "outcome"
@@ -193,14 +193,17 @@ def verify_outcome(client: ZulipClient, kind: str, target: str) -> str | None:
         if not any(n.startswith(PLAN_TOPIC_PREFIX) or n.startswith(f"{RESOLVED_TOPIC_PREFIX}{PLAN_TOPIC_PREFIX}") for n in names):
             return f"#{target} has no `{PLAN_TOPIC_PREFIX}…` topic yet"
     if kind in ("project", "study"):
-        setup = f"{SETUP_TOPIC_PREFIX}{slug}"
-        history = client.topic_history(target, setup, num_before=50) or client.topic_history(
-            target, f"{RESOLVED_TOPIC_PREFIX}{setup}", num_before=50)
-        self_id = int(client.whoami()["user_id"])
-        if not history:
-            return f"#{target} › {setup} does not exist: the workspace has not been asked for"
-        if not any(m.get("sender_id") != self_id and is_speech(m) and not is_ack(str(m.get("content", ""))) for m in history):
-            return f"#{target} › {setup} has no answer yet: the workspace is not known to exist"
+        # Whoever asked for the workspace — Front here, archsage for a study
+        # it established — the answer that counts is autolab's, after the
+        # request; for a study, the line naming the repository and commit.
+        state = inspect_project(slug, client, kind=kind)
+        if state.setup_id is None:
+            return f"#{target} › {SETUP_TOPIC_PREFIX}{slug} does not exist: the workspace has not been asked for"
+        if kind == "study" and state.state != "ready":
+            return (f"#{target} › {state.setup_topic} is {state.state}: the study's workspace is not confirmed "
+                    "(no `study layout established` answer and no internal repository)")
+        if kind == "project" and state.state not in ("ready", "answered"):
+            return f"#{target} › {state.setup_topic} has no answer yet: the workspace is not known to exist"
     return None
 
 

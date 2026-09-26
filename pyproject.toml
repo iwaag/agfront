@@ -8,7 +8,6 @@ dependencies = ["pyagag"]
 [project.scripts]
 agfront-zulip-listener = "agfront.listener:main"
 agbudget = "agfront.budget:main"
-agproject = "agfront.project:main"
 
 [dependency-groups]
 dev = ["pytest"]
