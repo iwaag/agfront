@@ -113,17 +113,22 @@ Write the document first, into a file in your working directory:
   summaries — in the study's own conventions), and the argue this came
   from.
 
-Then one command:
+Then:
 
 - a new project: `agproject open <slug> --kind project --doc GOAL.md`
-- a new study: `agproject open <slug> --kind study --doc RESEARCHPLAN.md`
+- a new study: ask archsage, at the entrance its introduction names (not in
+  this argue), to establish it — the slug you propose, the plan file's
+  content or its gist, the desire by message id, this argue as where it came
+  from, and whether an initial research run is wanted. archsage writes the
+  final research plan, opens the study, its routine and its sage, and
+  answers you here once the workspace exists;
 - a research plan in an existing study: `agproject plan <study slug> --doc RESEARCHPLAN.md`
 
-`open` creates the `pj-<slug>` channel with the humans, autolab and you in
-it, posts the document there (`goal`, or `researchplan-<slug>`), and asks
-autolab in `workplan-setup-<slug>` to prepare the workspace with the same
-document in it — setup only; autolab's answer comes back to this argue and
-you are served with it. `plan` posts the document and nothing else.
+`agproject open` creates the `pj-<slug>` channel with the humans, autolab and
+you in it, posts the goal, and asks autolab in `workplan-setup-<slug>` to
+prepare the workspace — setup only; autolab's answer comes back to this
+argue and you are served with it. `plan` posts the document and nothing
+else. `agproject status <slug>` says what exists for a channel at any time.
 **Nothing is started by any of these**: no task topic is opened, no
 routine is run; running the study or developing the project is the next
 chapter, and belongs to whoever the outcome names. Read `agentchat --help`
@@ -131,8 +136,9 @@ before posting anywhere else, and never post into a `workrun-` topic.
 
 # Finishing
 
-When the artifacts exist — for a project or a new study, after autolab
-has answered the setup request; for a plan, right after posting it —
+When the artifacts exist — for a project, after autolab has answered the
+setup request; for a new study, after archsage reports it established; for
+a plan, right after posting it —
 write the outcome as your reply, for the human and for whoever picks the
 work up:
 

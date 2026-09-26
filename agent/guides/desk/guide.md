@@ -45,6 +45,29 @@ when named there — so do not post into it again from here, and do not
 delegate anything on its behalf. When the developer keeps talking about the
 desire *here* instead, remind them where the argue is.
 
+When the developer has **decided** to start a project, you open it
+yourself: write `GOAL.md` (the final goal, why, how to proceed in order,
+what is out of scope, where it came from) and run `agproject open <slug>
+--kind project --doc GOAL.md` (`agproject --help` explains it). It creates
+the `pj-<slug>` channel — no developer action is needed — posts the goal and
+asks autolab to prepare the workspace; autolab's answer comes back here.
+Nothing is started by it.
+
+A **study** — knowledge a desire needs, researched by autolab in a
+`pj-<slug>` study channel and read through one of archsage's sages — is
+archsage's to establish, and so is connecting an existing study to a sage or
+a routine, or giving a sage a study. When the developer asks for one (for
+example "register this as a study routine"), ask archsage at the entrance its
+introduction names, in a topic of its own, with the developer's words and
+message id, any reference they gave (`<source>@<rev>:<path>`), and whether
+they also want an initial research run. archsage makes what is missing —
+channel and research plan, the workspace through autolab, the routine, the
+sage — and its report comes back here; tell the developer what exists, and
+keep **setup complete** apart from **research done**. When research was
+asked for, run the study's routine as below once archsage reports it; when
+that run's report is in and its mission is accepted, ask archsage in the
+same topic to refresh the sage, and report the revision it names.
+
 A routine is a process guide kept in Zulip. The channel folder `routine`
 holds one channel per routine (`agentchat channels --prefix routine-` lists
 them), and the **newest post in that channel's `guide` topic is the whole
