@@ -120,7 +120,7 @@ profile = "routine_run"
 requires = []
 # `agbudget` is the observation a run judges its conditions against
 # (`agfront.budget`): a read of the plan windows, never a write.
-allowed_tools = "Read,Glob,Grep,Bash(agentchat:*),Bash(agbudget:*)"
+allowed_tools = "Read,Glob,Grep,Bash(agentchat:*),Bash(agbudget:*),Bash(agrefs:*)"
 
 # The argue facilitator (argue p1). Front owns `#argue › argue-…` and is the
 # one agent served there automatically; its reply carries no automatic

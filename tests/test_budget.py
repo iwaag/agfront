@@ -127,7 +127,8 @@ def test_the_run_role_may_read_the_budget_and_nothing_else_new():
     config, overlay = load_config(SPEC.agents_config, Path("/nonexistent"))
     grant = resolve_role(config, overlay, "routine_run", check_available=False).allowed_tools
     assert "Bash(agbudget:*)" in grant and "Bash(agentchat:*)" in grant
-    remaining = grant.replace("Bash(agentchat:*)", "").replace("Bash(agbudget:*)", "")
+    # agrefs reads the shared contexts, read-only (give_context_easier p1).
+    remaining = grant.replace("Bash(agentchat:*)", "").replace("Bash(agbudget:*)", "").replace("Bash(agrefs:*)", "")
     assert "Bash(" not in remaining and "Write" not in grant
     for role in ("front", "desk"):
         assert "agbudget" not in resolve_role(config, overlay, role, check_available=False).allowed_tools
