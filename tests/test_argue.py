@@ -20,6 +20,7 @@ from agag.selfnote import Conversation
 
 from agfront import argue as argue_module
 from agfront import zulip_listener
+from endmark import plain
 
 BOT_ID = 15
 HUMAN_ID = 8
@@ -107,7 +108,8 @@ def wire(monkeypatch, tmp_path, calls, *, answer="on it"):
 
 
 def replies(calls):
-    return [c for c in calls if c[0] == "reply"]
+    """Replies, their bodies without the serving-end mark (`endmark`)."""
+    return [(*c[:3], plain(c[3]), *c[4:]) for c in calls if c[0] == "reply"]
 
 
 def posts(calls):

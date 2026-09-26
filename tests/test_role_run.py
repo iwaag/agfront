@@ -16,6 +16,7 @@ from agag.agent_config import load_config, resolve_role
 
 from agfront import zulip_listener
 from agfront.instance import SPEC
+from endmark import plain
 
 
 def test_front_s_grant_is_reading_agentchat_and_agproject():
@@ -161,7 +162,7 @@ def test_a_stub_run_goes_through_the_real_harness_seam(monkeypatch, tmp_path):
     # Nothing but the front topic is posted to: the outbound side is Front's
     # own doing now, and agfront has no route of its own left.
     assert {post[0] for post in posts} == {"front"}
-    assert posts[-1][2] == "@**Developer**\n\nasking"
+    assert plain(posts[-1][2]) == "@**Developer**\n\nasking"
 
     workspace = tmp_path / "topics" / "front" / "front-stub" / "1" / "front"
     # The run really saw its prompt on stdin, and the prompt was the placement

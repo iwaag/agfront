@@ -33,6 +33,7 @@ from agag.zulip import ZulipError
 
 from agfront import settings as agfront_settings
 from agfront import zulip_listener
+from endmark import plain
 
 BOT_ID = 15
 HUMAN_ID = 8
@@ -149,8 +150,9 @@ def gen_dir(tmp_path, number, role="front"):
 
 
 def replies(calls):
-    """Just the message bodies, in the order they were posted."""
-    return [call[3] for call in calls if call[0] == "reply"]
+    """Just the message bodies, in the order they were posted, without the
+    serving-end mark (`endmark`)."""
+    return [plain(call[3]) for call in calls if call[0] == "reply"]
 
 
 # --- one serving ------------------------------------------------------------
@@ -317,7 +319,7 @@ def test_an_empty_topic_costs_no_agent_run(monkeypatch, tmp_path):
     wire(monkeypatch, tmp_path, calls)
     zulip_listener.handle_topic(Client(calls, history=[]), CHANNEL, TOPIC)
     assert not any(call[0] == "front" for call in calls)
-    assert calls[-1][3] == zulip_listener.EMPTY_REPLY
+    assert plain(calls[-1][3]) == zulip_listener.EMPTY_REPLY
 
 
 def test_our_acks_are_dropped_from_the_chatlog(monkeypatch, tmp_path):
