@@ -130,8 +130,9 @@ If you think task is already done, just reply so.
 
 `agrefs` reads what the developer has published for a project to be built
 from — stories, images, templates, runnable examples — by name at a pinned
-revision: `<source>@<revision>[:<path>]`. `agrefs list` shows the sources on
-this host; `agrefs sync <source>` fetches the newest published revision and
+revision: `<source>@<revision>[:<path>]`. `agrefs list` shows
+every source the developer has published for agents, with what each is for;
+`agrefs sync <source>` fetches the newest published revision and
 prints the commit it is; `agrefs show <source>@<rev>[:<path>]` prints a text
 file, lists a directory, or says what a binary is; `agrefs path …` is the
 file itself, which your own image reader can open (`agrefs --help` has the
@@ -149,3 +150,7 @@ resolved identity into whatever you write for other agents: `GOAL.md`, a
 `agrefs sync` printed, never `latest`), so that every agent reads the same
 bytes; a later change by the developer is a new revision to adopt on
 purpose, not a drift.
+
+A reference the developer inserted from the room's context panel already
+carries the full commit (`<source>@<40 hex>[:<path>]`): read exactly that
+revision and pass it on as it is.
