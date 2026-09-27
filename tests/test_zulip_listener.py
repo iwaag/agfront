@@ -1015,3 +1015,17 @@ def test_the_evidence_says_what_each_post_is_and_hides_the_line():
     assert "ag-post" not in text
     assert "asks Developer to answer (question); request #2" in text
     assert "[Developer #3] sender 8" in text and "answers #2" in text
+
+
+def test_the_reply_unusable_fault_breaks_n_servings_then_is_gone(tmp_path, monkeypatch):
+    """failsafe p3 trial aid: created only by a person."""
+    fault = tmp_path / "reply-unusable"
+    monkeypatch.setattr(zulip_listener, "REPLY_UNUSABLE_FAULT", fault)
+    assert zulip_listener._reply_unusable() is False
+    fault.write_text("2")
+    assert zulip_listener._reply_unusable() is True and fault.read_text() == "1"
+    assert zulip_listener._reply_unusable() is True and not fault.exists()
+    broken = zulip_listener._unusable("note\n<ag-reply intent=report>\nhi\n</ag-reply>")
+    from agag.reply import split_reply
+
+    assert not split_reply(broken).ok and "hi" in broken

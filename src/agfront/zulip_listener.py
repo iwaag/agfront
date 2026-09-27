@@ -424,12 +424,40 @@ def serve(context) -> TopicResult:
     # role, asked for the reply alone with its previous output in front of
     # it (`agag.reply.repair_prompt`), nothing else.
     repair = repair_with(lambda prompt: run_front(prompt, front_dir, home, role, selection=context.selection), output)
+    if _reply_unusable():
+        output, repair = _unusable(output), (lambda reason: _unusable(repair(reason)))
     if run:
         return finish_run(context, output, repair)
     # A desk or front reply is what the run marked (`agag.reply`): the scene
     # the screen plays is rendered from the posted text afterwards
     # (`agfront.render`), never by this run — and only the posted text.
     return TopicResult(output=output, repair=repair)
+
+
+#: failsafe p3 trial fault, created only by a person: while this file holds a
+#: number N > 0, the next serving's reply mark — in its run's output and in
+#: the output of its in-run repair — is made unreadable, and N goes down by
+#: one. N = 1 is a failure the listener's re-serving repairs; N = 2 is one
+#: it cannot, which the monitor reports to the owners.
+REPLY_UNUSABLE_FAULT = SPEC.local / "faults" / "reply-unusable"
+
+
+def _reply_unusable() -> bool:
+    try:
+        left = int((REPLY_UNUSABLE_FAULT.read_text(encoding="utf-8").strip() or "1"))
+    except (OSError, ValueError):
+        return False
+    if left <= 1:
+        REPLY_UNUSABLE_FAULT.unlink(missing_ok=True)
+    else:
+        REPLY_UNUSABLE_FAULT.write_text(str(left - 1), encoding="utf-8")
+    log(f"fault injected: this serving's reply mark is made unusable ({left - 1} more after it)")
+    return True
+
+
+def _unusable(output: str) -> str:
+    """The run's words with its reply mark broken: nothing else changes."""
+    return (output or "").replace("<ag-reply", "<ag-reply-broken").replace("</ag-reply>", "</ag-reply-broken>")
 
 
 def finish_run(context, output: str, repair=None) -> TopicResult:
