@@ -176,6 +176,11 @@ conversation it names. Then, in this serving, do one of these:
   topic that already has work in it. Do not open a new topic for it.
   A resume asks for the work; it does not agree to a result nobody has
   seen. The task closes on an agreement to the result it shows.
+  Work has moved again only if its owner posted in **that** conversation
+  after the stop — an acknowledgement or a progress line there with a later
+  id than the one the check names. Your own acknowledgement in your own
+  conversation is not the work moving (failsafe p3 trial A: Front read it
+  so, and the stopped task waited for the developer).
 - **A process is alive, or the work waits on something named.** Do not
   start the same work a second time beside it. If the health check or the
   trace shows it waiting on a tool, a job or another agent, say so in your
