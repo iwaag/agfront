@@ -100,3 +100,36 @@ def test_somebody_elses_topic_and_a_non_run_are_refused(monkeypatch):
 def test_the_command_line_validates_the_report(capsys):
     assert runfinish.main(["routine-study-x", RUN, "--achieved", "--reason", "r", "--report", ""]) == 1
     assert "report" in capsys.readouterr().out
+
+
+class Interrupted(Client):
+    """Dies (a dropped connection, a killed process) on the first send whose
+    text contains `die_on`, after `after` earlier sends went through."""
+
+    def __init__(self, realm, die_on):
+        super().__init__(realm)
+        self.die_on = die_on
+
+    def send_to_channel(self, channel, topic, content):
+        if self.die_on and self.die_on in content:
+            self.die_on = None
+            from agag.zulip import ZulipError
+            raise ZulipError("connection dropped")
+        return super().send_to_channel(channel, topic, content)
+
+
+def test_baseline_an_end_record_without_its_delivery_is_never_delivered_on_retry(realm):
+    """failsafe p5 step 1: the plan's hypothesis, confirmed. The end record
+    is written first; an interruption before the report reaches the desk
+    leaves a run whose retry finds "already ended" and stops — the report and
+    the `[delivered]` note are never written, and the run is ✔ anyway."""
+    first = Interrupted(realm, "Routine run finished")
+    with pytest.raises(Exception):
+        runfinish.finish(first, "routine-study-x", RUN, REPORT, out=io.StringIO())
+    assert [m for m in realm.history("routine-study-x", RUN) if finish_record(m["content"])]
+    out = io.StringIO()
+    assert runfinish.finish(Client(realm), "routine-study-x", RUN, REPORT, out=out) == 0
+    desk = [m["content"] for m in realm.history("front", DESK)]
+    assert not any("Routine run finished" in c for c in desk), "delivered after all"
+    assert not any(c.startswith("[selfnote][delivered]") for c in desk)
+    assert "already ended" in out.getvalue()
