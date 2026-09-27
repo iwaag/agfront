@@ -57,7 +57,10 @@ RECORD_SCHEMA = DIALOGUE_SCHEMA
 #: How much earlier conversation a rendering is shown, newest last.
 CONTEXT_POSTS = 12
 CONTEXT_POST_CHARS = 1500
-#: Zulip truncates silently past 10000; one record stays well under it.
+#: One memo record's size: a rendering longer than this is split into
+#: numbered parts, so nothing is lost. A choice of record size, not the
+#: realm's post limit (which is the server's `max_message_length`, and
+#: which the client refuses over rather than cutting — failsafe p4).
 MAX_RECORD_CHARS = 8500
 
 _HANDOFF = re.compile(r"^\s*@\*\*[^*\n]+\*\*\s*\n+")
