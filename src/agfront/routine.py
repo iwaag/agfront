@@ -101,8 +101,10 @@ DELIVERED_TAG = "delivered"
 SCHEMA = "ag.routinerun-finish.v1"
 FENCE = "ag-routinerun"
 ERROR_FENCE = "ag-routinerun-error"
-#: This realm truncates a post silently past 10000 characters.
-MAX_REPORT_CHARS = 8000
+#: What a report leaves for the delivery's own words around it, in the
+#: post that carries it to the requester (failsafe p4: the size is the
+#: server's advertised one, `ZulipClient.max_message_length`).
+REPORT_OVERHEAD = 1000
 
 _BLOCK = re.compile(r"```[ \t]*" + re.escape(FENCE) + r"[ \t]*\n(.*?)\n[ \t]*```[ \t]*", re.DOTALL)
 _MENTION = re.compile(r"@\*\*([^*\n]+)\*\*")
@@ -317,7 +319,7 @@ def _plain(text: str) -> str:
     return _MENTION.sub(r"\1", text)
 
 
-def parse_finish(body: str) -> FinishReport:
+def parse_finish(body: str, limit: int | None = None) -> FinishReport:
     try:
         data = json.loads(body)
     except json.JSONDecodeError as error:
@@ -335,12 +337,13 @@ def parse_finish(body: str) -> FinishReport:
         raise FinishError("`reason` must say why the run ends")
     if not report:
         raise FinishError("`report` must carry the report for the requester")
-    if len(report) > MAX_REPORT_CHARS:
-        raise FinishError(f"`report` is longer than {MAX_REPORT_CHARS} characters, which this realm would truncate")
+    if limit is not None and len(report) > limit - REPORT_OVERHEAD:
+        raise FinishError(f"`report` is {len(report)} characters; the post that delivers it holds at most "
+                          f"{limit - REPORT_OVERHEAD} of them. Shorten it and say where the whole is kept")
     return FinishReport(achieved=achieved, reason=_plain(reason), report=_plain(report))
 
 
-def split_finish(output: str) -> tuple[str, FinishReport | None, str | None]:
+def split_finish(output: str, limit: int | None = None) -> tuple[str, FinishReport | None, str | None]:
     """`(reply, finish, error)` from the run's whole output.
 
     The block is the *last* fence of its kind. No block: the run goes on and
@@ -355,7 +358,7 @@ def split_finish(output: str) -> tuple[str, FinishReport | None, str | None]:
     reply = (output[:last.start()] + output[last.end():]).strip()
     body = last.group(1).strip()
     try:
-        return reply, parse_finish(body), None
+        return reply, parse_finish(body, limit), None
     except FinishError as error:
         return reply, None, str(error)
 

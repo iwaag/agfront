@@ -474,7 +474,8 @@ def finish_run(context, output: str, repair=None) -> TopicResult:
     stays open.
     """
     context.step = "finish"
-    reply, finish, error = split_finish(output)
+    size = getattr(context.client, "max_message_length", None)
+    reply, finish, error = split_finish(output, size() if callable(size) else None)
     if error is not None:
         log(f"finish block unusable: {error}")
     if finish is None:

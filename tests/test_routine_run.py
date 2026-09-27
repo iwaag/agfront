@@ -765,3 +765,21 @@ def test_a_run_started_inside_a_serving_does_not_take_over_its_journal(monkeypat
         zulip_listener.start_opened_runs(Quiet(), ("front", "front-desk-x"))
         assert serving_record.current() is outer
     assert seen and seen[0] is not outer
+
+
+def test_a_report_is_sized_to_the_server_s_post_not_a_fixed_cap():
+    """failsafe p4: the delivering post holds the server's advertised
+    `max_message_length`; a report over it (less the delivery's own words)
+    is refused with its size, and one well over the old 8000 passes."""
+    import json
+
+    from agfront import routine
+
+    def block(report):
+        body = json.dumps({"schema": routine.SCHEMA, "achieved": True, "reason": "done", "report": report})
+        return f"```{routine.FENCE}\n{body}\n```"
+
+    _, finish, error = routine.split_finish(block("r" * 20000), 100000)
+    assert error is None and len(finish.report) == 20000
+    _, finish, error = routine.split_finish(block("r" * 20000), 10000)
+    assert finish is None and "holds at most 9000" in error
