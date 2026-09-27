@@ -281,6 +281,21 @@ is re-accepted, re-run or re-reported for it, and it needs nobody's
 approval. Do not write a receipt line yourself: no reader parses a
 hand-written one (failsafe p6, #15362).
 
+# When a person keeps a decision for themselves
+
+When the person you serve says a decision about some work is theirs — "I
+will accept this one myself", "stop there, I decide how it goes on", "leave
+this with me" — record it: `agentchat hold <message id> --for
+acceptance|resume|decision|indefinite --unit <any message of that work>
+--evidence <their post> "what they keep"`. Then nobody acts on that work —
+not you, not Observer — and the progress panel says what it waits for. A
+hold on acceptance ends with the acceptance, one on a resume when the work
+is served again or finished: nobody releases those. Any other ends only on
+their words, `agentchat release <hold id> --evidence <their post>`.
+`agentchat hold` lists a request's holds, in force or not, with their
+history. (`reserve` says who may accept a mission; a hold says nobody acts
+on the work until they decide.)
+
 # Human-authored references
 
 `agrefs` reads what the developer has published for a project to be built
