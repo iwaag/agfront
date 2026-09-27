@@ -553,8 +553,12 @@ def run_state(client, channel: str, topic: str, self_id: int) -> RunState:
         name = located.topic if located is not None else live_topic_name(client, state.origin.channel,
                                                                           state.origin.topic)
         state.origin = Conversation(state.origin.channel, name, state.origin.anchor)
+        # Anywhere in the origin, not only after the end record: until
+        # failsafe p5 the listener delivered a run's report *before* writing
+        # its end, and a run topic's name is its own (a stamp), so a report or
+        # a delivered note naming it is this run's whenever it was written.
         for message in _history_across(client, state.origin.channel, name):
-            if message.get("sender_id") != self_id or int(message.get("id") or 0) <= state.ended_id:
+            if message.get("sender_id") != self_id:
                 continue
             content = str(message.get("content") or "")
             if parse_delivered(content) == state.run:

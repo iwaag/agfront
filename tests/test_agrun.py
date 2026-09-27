@@ -223,3 +223,17 @@ def test_status_lists_the_runs_and_their_end(realm):
     out = io.StringIO()
     agrun.status(Client(realm), routine.Conversation("front", DESK), out)
     assert "ended at" in out.getvalue() and "report delivered" in out.getvalue() and "resolved" in out.getvalue()
+
+
+def test_a_report_delivered_before_its_end_record_is_recognised(realm):
+    """Until p5 the listener delivered first and recorded the end after it
+    (B growbox #13829 then #13831): that run's close-out is complete, and
+    recovery must not deliver it again (it did once, at the first restart)."""
+    run = routine.Conversation(RUN_CHANNEL, RUN)
+    realm.post("front", DESK, routine.delivery_text(REPORT, run), FRONT)
+    realm.post("front", DESK, routine.delivered_note(run), FRONT)
+    realm.post(RUN_CHANNEL, RUN, routine.record_text("entry", REPORT, None), FRONT)
+    Client(realm).resolve_topic(realm.messages[-1]["id"], RUN)
+    state = run_state(Client(realm), RUN_CHANNEL, RUN, FRONT)
+    assert state.complete
+    assert close_out_pending(Client(realm), FRONT, now=realm.messages[-1]["timestamp"] + 60) == []
