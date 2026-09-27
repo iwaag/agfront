@@ -425,7 +425,8 @@ def serve(context) -> TopicResult:
     # it (`agag.reply.repair_prompt`), nothing else.
     repair = repair_with(lambda prompt: run_front(prompt, front_dir, home, role, selection=context.selection), output)
     if _reply_unusable():
-        output, repair = _unusable(output), (lambda reason: _unusable(repair(reason)))
+        real_repair = repair
+        output, repair = _unusable(output), (lambda reason: _unusable(real_repair(reason)))
     if run:
         return finish_run(context, output, repair)
     # A desk or front reply is what the run marked (`agag.reply`): the scene
