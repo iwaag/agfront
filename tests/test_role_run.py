@@ -136,7 +136,7 @@ def test_a_stub_run_goes_through_the_real_harness_seam(monkeypatch, tmp_path):
         "printf '%s\\n' \"$AGENTCHAT_HOME\" > home.seen\n"
         "command -v agentchat > agentchat.seen\n"
         "echo 'I will ask.'\n"
-        "printf '%s\\n' '```ag-reply' 'asking' '```'",
+        "printf '%s\\n' '<ag-reply>' 'asking' '</ag-reply>'",
     )
     # The spec rooted at tmp_path: its config pair is the stub one above, its
     # credentials path is tmp_path's (the file need not exist — it travels

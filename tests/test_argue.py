@@ -79,9 +79,9 @@ def marked(answer: str) -> str:
     """A stub run's output under the reply contract (`agag.reply`): the
     answer inside an `ag-reply` mark, after a line of the run's own, unless
     the test wrote the marks itself."""
-    if "```ag-reply" in answer:
+    if "<ag-reply" in answer:
         return answer
-    return f"thinking about it first.\n\n```ag-reply\n{answer}\n```"
+    return f"thinking about it first.\n\n<ag-reply>\n{answer}\n</ag-reply>"
 
 
 def wire(monkeypatch, tmp_path, calls, *, answer="on it"):
@@ -336,7 +336,7 @@ def test_7222_marked_posts_only_the_reply_and_the_rendering_sees_only_that(monke
 
     observed = (_Path(__file__).parent / "fixtures" / "reply" / "7222.md").read_text(encoding="utf-8")
     thought, _, said = observed.partition("Let me post a reply asking for that.\n\n")
-    output = f"{thought}Let me post a reply asking for that.\n\n```ag-reply\n{said.strip()}\n```\n\n```ag-argue\ndesire: 92\n```"
+    output = f"{thought}Let me post a reply asking for that.\n\n<ag-reply>\n{said.strip()}\n</ag-reply>\n\n```ag-argue\ndesire: 92\n```"
     calls = []
     wire(monkeypatch, tmp_path, calls, answer=output)
     history = [message(sender_id=BOT_ID, name="Front", content=argue_note(Conversation("front", "front-a")), id=90),
