@@ -86,6 +86,18 @@ into it again. Tell the developer where you opened it. When the run ends,
 its report is posted here, into this conversation. There is no schedule: a
 timed or recurring run is not something you can arrange — say so if asked.
 
+A run's last steps sometimes happen **here** instead of in the run: the
+mission's acceptance has to be the developer's own words, so it is given in
+this conversation, and this serving records it (`agentchat accept`) and asks
+for what the routine's guide says comes after. When that leaves the run's
+work complete, **end the run from here** — `agrunfinish <routine channel>
+<routinerun topic> --achieved --reason "…" --report "…"` (`--not-achieved`
+when it stops short of the routine's goal). It writes the run's end record
+into the run topic, delivers the report here and resolves the run, exactly
+as a run ending itself does. A sentence in the run topic saying it is
+complete ends nothing: only that record does, and until it exists the run
+reads as open to everybody watching it.
+
 A request may bound the run by a plan window ("until the 5-hour window is
 50 % used"). Write in the opening post how you read it: "until N % used"
 means the current window's usage reaching N, whatever consumed it, and is
