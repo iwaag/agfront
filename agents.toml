@@ -75,7 +75,7 @@ requires = []
 # adventure_game p1 the developer may decide to start a project or study
 # after the argue that shaped it has closed, and this conversation is then
 # where the decision is handed over (the `argue` role keeps the same grant).
-allowed_tools = "Read,Write,Glob,Grep,Bash(agentchat:*),Bash(agproject:*),Bash(agrefs:*),Bash(agrunfinish:*)"
+allowed_tools = "Read,Write,Glob,Grep,Bash(agentchat:*),Bash(agproject:*),Bash(agrefs:*),Bash(agrun:*)"
 
 # The Front Desk (front_desk p1; `desk` since argue p2). The same reading
 # tools and the same one route to other agents as `front`; what differs is
@@ -90,7 +90,7 @@ model = "anthropic/claude-sonnet-5"
 [roles.desk]
 profile = "desk"
 requires = []
-allowed_tools = "Read,Write,Glob,Grep,Bash(agentchat:*),Bash(agproject:*),Bash(agrefs:*),Bash(agrunfinish:*)"
+allowed_tools = "Read,Write,Glob,Grep,Bash(agentchat:*),Bash(agproject:*),Bash(agrefs:*),Bash(agrun:*)"
 
 # The presentation role (argue p2): recorded speech in, character dialogue
 # out (`agfront.present`). Its whole input is in its prompt and beside it as
@@ -120,7 +120,7 @@ profile = "routine_run"
 requires = []
 # `agbudget` is the observation a run judges its conditions against
 # (`agfront.budget`): a read of the plan windows, never a write.
-allowed_tools = "Read,Glob,Grep,Bash(agentchat:*),Bash(agbudget:*),Bash(agrefs:*)"
+allowed_tools = "Read,Glob,Grep,Bash(agentchat:*),Bash(agbudget:*),Bash(agrefs:*),Bash(agrun:*)"
 
 # The argue facilitator (argue p1). Front owns `#argue › argue-…` and is the
 # one agent served there automatically; its reply carries no automatic

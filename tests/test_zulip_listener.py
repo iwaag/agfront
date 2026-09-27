@@ -248,7 +248,7 @@ def test_no_schedule_tool_is_placed_in_tools(monkeypatch, tmp_path):
         run=lambda cwd: seen.update(files=sorted(f.name for f in (cwd / "tools").iterdir())),
     )
     zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
-    assert seen["files"] == ["agents.md"]
+    assert seen["files"] == ["agents.md", "runs.md"]
 
 
 def test_a_run_sees_the_board_as_it_was_at_that_moment(monkeypatch, tmp_path):

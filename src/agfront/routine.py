@@ -467,3 +467,162 @@ def pending_continuations(
         if awaiting_continuation(history, self_id) is not None:
             found.append(Conversation(home.channel, name))
     return found
+
+
+# --- closing out (failsafe p5) -----------------------------------------------
+#
+# A run's end is four records in order: the end record in the run topic, the
+# report delivered to the conversation that asked, the `[delivered]` note
+# beside it, and the ✔. Until p5 the listener delivered the report *before*
+# the end record existed and `agrunfinish` stopped at "already ended" without
+# looking at the delivery, so an interruption between the steps left either a
+# delivered report with no end (and a rerun of the run) or an end nobody was
+# ever told about. Now the end record comes first and `close_out` finishes
+# whatever of the rest is missing, from the records alone: the same function
+# after a run's serving, after `agrun finish`, and at startup.
+
+#: At startup only ends this recent are completed: an end older than that
+#: was closed out by the rules of its time, and a report delivered under an
+#: older wording is not recognizable as one.
+CLOSE_OUT_HORIZON = 24 * 3600
+
+
+@dataclass
+class RunState:
+    """What the records say about one run's end."""
+
+    run: Conversation
+    live: str = ""
+    ended_id: int = 0
+    finish: FinishReport | None = None
+    origin: Conversation | None = None
+    reported_id: int = 0
+    delivered_id: int = 0
+    resolved: bool = False
+    start_owed: bool = False
+    ended_at: int = 0
+
+    @property
+    def complete(self) -> bool:
+        return bool(self.ended_id) and self.resolved and (self.origin is None or bool(self.delivered_id))
+
+    def line(self) -> str:
+        where = f"#{self.run.channel} › {self.run.topic}"
+        if not self.ended_id:
+            return (f"{where}: open (no end record)" + ("; a continuation you started waits to be served"
+                                                         if self.start_owed else ""))
+        parts = [f"ended at #{self.ended_id} ({'goal reached' if self.finish and self.finish.achieved else 'goal not reached'})"]
+        if self.origin is not None:
+            parts.append(f"report delivered #{self.reported_id}" if self.reported_id else "report NOT delivered")
+            parts.append("delivered note written" if self.delivered_id else "delivered note missing")
+        parts.append("resolved" if self.resolved else "NOT resolved")
+        return f"{where}: " + "; ".join(parts)
+
+
+def _history_across(client, channel: str, topic: str, n: int = 400) -> list[dict]:
+    from agag.zulip import topic_history_across_resolve
+
+    return topic_history_across_resolve(client, channel, topic, n, strict=True)
+
+
+def run_state(client, channel: str, topic: str, self_id: int) -> RunState:
+    """Read one run's end records (never writes)."""
+    from agag.selfnote import owed_start
+    from agag.trace import finish_record
+    from agag.zulip import locate
+
+    bare = topic[len(RESOLVED_TOPIC_PREFIX):] if topic.startswith(RESOLVED_TOPIC_PREFIX) else topic
+    state = RunState(Conversation(channel, bare))
+    history = _history_across(client, channel, bare)
+    if not history:
+        return state
+    state.live = str(history[-1].get("subject") or bare)
+    state.resolved = state.live.startswith(RESOLVED_TOPIC_PREFIX)
+    state.start_owed = owed_start(history, self_id, is_ack=is_ack) is not None
+    ended = next((m for m in history if m.get("sender_id") == self_id and finish_record(m.get("content"))), None)
+    origin = origin_of(history, self_id)
+    state.origin = origin if origin is not None and (origin.channel, origin.topic) != (channel, bare) else None
+    if ended is None:
+        return state
+    state.ended_id, state.ended_at = int(ended["id"]), int(ended.get("timestamp") or 0)
+    record = finish_record(ended.get("content")) or {}
+    state.finish = FinishReport(achieved=bool(record.get("achieved")), reason=str(record.get("reason") or ""),
+                                report=str(record.get("report") or ""))
+    if state.origin is not None:
+        located = locate(client, state.origin) if state.origin.anchor else None
+        name = located.topic if located is not None else live_topic_name(client, state.origin.channel,
+                                                                          state.origin.topic)
+        state.origin = Conversation(state.origin.channel, name, state.origin.anchor)
+        for message in _history_across(client, state.origin.channel, name):
+            if message.get("sender_id") != self_id or int(message.get("id") or 0) <= state.ended_id:
+                continue
+            content = str(message.get("content") or "")
+            if parse_delivered(content) == state.run:
+                state.delivered_id = int(message["id"])
+            elif content.startswith("**Routine run finished**") and f"`{bare}`" in content:
+                state.reported_id = int(message["id"])
+    return state
+
+
+def close_out(client, channel: str, topic: str, self_id: int, *, log=lambda line: None) -> RunState:
+    """Finish a run's end from its end record: deliver the report and the
+    delivered note where missing, then resolve. Nothing when the run has no
+    end record; nothing twice. Raises what the writes raise — a repeat
+    finishes the rest."""
+    state = run_state(client, channel, topic, self_id)
+    if not state.ended_id or state.finish is None:
+        return state
+    if state.origin is not None:
+        if not state.reported_id:
+            state.reported_id = int(client.send_to_channel(state.origin.channel, state.origin.topic,
+                                                           delivery_text(state.finish, state.run)) or 0)
+            log(f"delivered the report of {state.run} to {state.origin}")
+        if not state.delivered_id:
+            state.delivered_id = int(client.send_to_channel(state.origin.channel, state.origin.topic,
+                                                            delivered_note(state.run)) or 0)
+    if not state.resolved:
+        client.resolve_topic(int(state.ended_id), state.live or state.run.topic)
+        state.resolved = True
+    return state
+
+
+def close_out_pending(client, self_id: int, *, now: float | None = None, log=lambda line: None) -> list[RunState]:
+    """Every run of Front's whose end was recorded recently and whose
+    close-out is incomplete, finished (startup recovery)."""
+    import time as _time
+
+    now = float(now if now is not None else _time.time())
+    done: list[RunState] = []
+    for (channel, topic), _home in reader_for(client).rootchats(include_resolved=True):
+        if not is_run_topic(topic):
+            continue
+        try:
+            state = run_state(client, channel, topic, self_id)
+            if not state.ended_id or state.complete or now - state.ended_at > CLOSE_OUT_HORIZON:
+                continue
+            log(f"completing the close-out of {state.run}: {state.line()}")
+            done.append(close_out(client, channel, topic, self_id, log=log))
+        except Exception as error:  # noqa: BLE001 - one run must not stop the others
+            log(f"close-out of {channel}/{topic} failed: {error!r}")
+    return done
+
+
+def runs_document(client, home: tuple[str, str], self_id: int) -> str:
+    """`tools/runs.md`: the runs this conversation opened and where each
+    one's end stands — the fact a desk serving needs to finish a run whose
+    last evidence arrived here instead of in the run."""
+    runs = opened_runs(client, home)
+    lines = ["# Routine runs opened from this conversation", ""]
+    if not runs:
+        lines.append("None.")
+        return "\n".join(lines) + "\n"
+    for run in runs:
+        try:
+            lines.append(f"- {run_state(client, run.channel, run.topic, self_id).line()}")
+        except Exception as error:  # noqa: BLE001 - the document says it could not read it
+            lines.append(f"- #{run.channel} › {run.topic}: could not be read ({type(error).__name__})")
+    lines += ["", "An open run is yours to continue or end: `agrun continue <channel> <topic> --because <post id>` "
+              "has the run itself served again (it reads what arrived and decides); `agrun finish <channel> "
+              "<topic> --achieved|--not-achieved --reason … --report …` ends it from here when its work is complete "
+              "by record. `agrun status` re-reads this."]
+    return "\n".join(lines) + "\n"

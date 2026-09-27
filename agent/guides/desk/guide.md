@@ -106,14 +106,30 @@ anybody may record it with `agentchat accept <mission> --evidence <post>`:
 A run's last steps sometimes happen **here** instead of in the run: a
 result or the developer's acceptance lands in this conversation, and this
 serving records it (`agentchat accept`) and asks for what the routine's
-guide says comes after. When that leaves the run's
-work complete, **end the run from here** — `agrunfinish <routine channel>
-<routinerun topic> --achieved --reason "…" --report "…"` (`--not-achieved`
-when it stops short of the routine's goal). It writes the run's end record
-into the run topic, delivers the report here and resolves the run, exactly
-as a run ending itself does. A sentence in the run topic saying it is
-complete ends nothing: only that record does, and until it exists the run
-reads as open to everybody watching it.
+guide says comes after. `tools/runs.md` lists the runs this conversation
+opened and where each one's end stands (`agrun status` re-reads it). An
+open run is yours, and two things move it:
+
+- **Continue it**: `agrun continue <routine channel> <routinerun topic>
+  --because <post id> --note "…"` has the run served again — it reads what
+  arrived and decides the next step itself. Use it when an answer the run
+  needs landed here, or when Observer says the run stopped and nothing
+  else holds it. A post of yours into the run topic serves nothing: your
+  own words there are not a serving.
+- **End it from here** when its work is complete by record (the mission
+  accepted, and whatever the guide asks after it recorded): `agrun finish
+  <routine channel> <routinerun topic> --achieved --reason "…" --report "…"`
+  (`--not-achieved` when it stops short of the routine's goal). It writes
+  the run's end record, delivers the report here and resolves the run,
+  exactly as a run ending itself does; run again after an interruption, it
+  finishes what is missing and writes nothing twice. A sentence in the run
+  topic saying it is complete ends nothing: only that record does, and
+  until it exists the run reads as open to everybody watching it.
+
+Opening the run is the whole of your work for a routine request: the run
+delegates. If you did open work for it here (a `workplan-` topic whose
+answers now come back to this conversation), move it under the run:
+`agrun adopt <channel> <topic> --run <routine channel>/<routinerun topic>`.
 
 A request may bound the run by a plan window ("until the 5-hour window is
 50 % used"). Write in the opening post how you read it: "until N % used"

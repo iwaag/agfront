@@ -75,7 +75,10 @@ requesting conversation), ask them in your report instead, and do not
 record your own words.
 
 Never post into the routine's `guide` topic. Never open another
-`routinerun-` topic yourself for this run.
+`routinerun-` topic yourself for this run. Work for this run that was opened
+from the requesting conversation instead of from here (its answers go
+there, and this run holds nothing) is moved under this run with `agrun
+adopt <channel> <topic> --run <this channel>/<this topic>`.
 
 # When Observer says work has stopped
 

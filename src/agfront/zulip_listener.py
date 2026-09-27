@@ -125,6 +125,8 @@ from .evidence import format_evidence, write_evidence_threads
 from .instance import SPEC
 from .routine import (
     ROUTINE_ROLE,
+    close_out,
+    close_out_pending,
     delivered_note,
     delivery_text,
     late_answer_text,
@@ -134,6 +136,7 @@ from .routine import (
     pending_continuations,
     record_text,
     recover_unstarted_runs,
+    runs_document,
     split_finish,
     unstarted,
 )
@@ -398,6 +401,17 @@ def serve(context) -> TopicResult:
 
     context.step = "harvest"
     write_agents_md(context.client, front_dir)
+    if not run:
+        # The runs this conversation opened and where each one's end stands
+        # (failsafe p5): the evidence a serving needs to continue or end a run
+        # whose last result arrived here instead of in the run.
+        context.step = "runs"
+        try:
+            (front_dir / "tools").mkdir(parents=True, exist_ok=True)
+            (front_dir / "tools" / "runs.md").write_text(
+                runs_document(context.client, (context.channel, context.topic), context.self_id), encoding="utf-8")
+        except Exception as error:  # noqa: BLE001 - a missing fact is said, not fatal
+            log(f"could not write tools/runs.md: {error!r}")
     if run:
         # The observation a run judges its conditions against, at the start
         # of this serving; `agbudget` re-reads it. A failed read is written
@@ -482,28 +496,15 @@ def finish_run(context, output: str, repair=None) -> TopicResult:
         return TopicResult(output=reply, sections=[record_text("", None, error)], repair=repair)
     run = Conversation(context.channel, context.topic)
     origin = origin_of(context.history, context.self_id)
-    if origin is not None and origin != run:
-        context.step = "delivery"
-        # Directly, never through `agentchat`: a root note pointing at the
-        # run must not be written into the requester's conversation.
-        # Located by the note's anchor when it has one (robust_workflow p2
-        # step 2): a renamed origin still gets its report, a new request that
-        # took the name does not.
-        located = locate(context.client, origin) if origin.anchor else None
-        name = located.topic if located is not None else live_topic_name(context.client, origin.channel,
-                                                                          origin.topic)
-        context.client.send_to_channel(origin.channel, name, delivery_text(finish, run))
-        # …and, right after it, the note that says a report is sitting there
-        # unread. The delivery is Front's own speech, so the sweeps will never
-        # serve that conversation again on their own; `continue_deliveries`
-        # is what does, and this note is the whole of its memory. Written
-        # after the report so a crash between the two leaves the requester
-        # with the report and no handoff, rather than a handoff and no report.
-        context.client.send_to_channel(origin.channel, name, delivered_note(run))
-        log(f"delivered the run's report to {origin}")
-        sections = [record_text("", finish, None)]
-    else:
-        sections = [record_text("", finish, None), delivery_text(finish, run)]
+    # The end record first (failsafe p5): it is this serving's reply, posted
+    # by the journaled delivery. The report, the delivered note and the ✔
+    # follow from the record (`agfront.routine.close_out`) once it exists —
+    # after this serving, and again at startup — so an interruption leaves
+    # an end whose rest is finished, never a delivered report with no end and
+    # a rerun of the run behind it.
+    sections = [record_text("", finish, None)]
+    if origin is None or origin == run:
+        sections.append(delivery_text(finish, run))
     return TopicResult(output=reply, sections=sections, resolve_after=True, repair=repair)
 
 
@@ -524,7 +525,20 @@ def handle_topic(client: ZulipClient, channel: str, topic: str, *, depth: int = 
     )
     start_opened_runs(client, (channel, topic), depth=depth)
     if is_run_topic(topic):
+        close_out_run(client, channel, topic)
         continue_deliveries(client, depth=depth)
+
+
+def close_out_run(client: ZulipClient, channel: str, topic: str) -> None:
+    """After a run's serving: if it wrote its end record, finish the
+    close-out from the record (report, delivered note, ✔). A failure is
+    logged; startup recovery and `agrun finish` complete it later."""
+    try:
+        state = close_out(client, channel, topic, int(client.whoami()["user_id"]), log=log)
+        if state.ended_id:
+            log(f"close-out of {state.run}: {state.line()}")
+    except Exception as error:  # noqa: BLE001 - the end record stands; the rest is owed and recovered
+        log(f"close-out of {channel!r}/{topic!r} is incomplete: {error!r}")
 
 
 def nested_serving():
@@ -606,6 +620,8 @@ def recover_runs(client: ZulipClient) -> list[tuple[str, str]]:
     reachable by a sweep, because Front is the last speaker in both.
     """
     self_id = int(client.whoami()["user_id"])
+    for state in close_out_pending(client, self_id, log=log):
+        log(f"recovered the close-out of {state.run}: {state.line()}")
     started: list[tuple[str, str]] = []
     for run in recover_unstarted_runs(client, self_id):
         log(f"recovering unstarted run {run}")
@@ -751,4 +767,5 @@ def handle_mention(client: ZulipClient, channel: str, topic: str) -> None:
     # handoff would only ever fire for a run that finished on its very first
     # serving, which is the rare one.
     if is_run_topic(home.topic):
+        close_out_run(client, home.channel, home.topic)
         continue_deliveries(client)

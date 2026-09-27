@@ -299,28 +299,27 @@ def test_recovery_starts_an_unstarted_run_after_a_restart(monkeypatch, tmp_path)
 # --- finishing ---------------------------------------------------------------
 
 
-def test_finishing_delivers_the_report_to_the_origin_and_resolves_the_run(monkeypatch, tmp_path):
+def test_finishing_writes_the_end_record_first_and_then_closes_out(monkeypatch, tmp_path):
+    """failsafe p5 step 4: the serving's reply is the end record; nothing is
+    delivered to the origin during the serving. The close-out (report,
+    delivered note, ✔ — `agfront.routine.close_out`, tested in
+    `test_agrun.py`) runs after the serving, from the record."""
     calls = []
     wire_runs(monkeypatch, tmp_path, calls, answer=FINISH)
+    closed = []
+    monkeypatch.setattr(zulip_listener, "close_out", lambda client, channel, topic, self_id, log=None:
+                        closed.append((channel, topic)) or routine.RunState(Conversation(channel, topic)))
     client = RunBoard(calls, {
         (CHANNEL, DESK_TOPIC): [desk_message("お願い")],
         (RUN_CHANNEL, RUN_TOPIC): [origin_note(), opening(), ack(), entry()],
     })
     zulip_listener.handle_topic(client, RUN_CHANNEL, RUN_TOPIC)
-    # Two posts outside the run and both into the desk: the report, naming the
-    # run, and — after it, so a crash between them loses the handoff and never
-    # the report — the delivered note. No root note before either.
-    posts = [c for c in calls if c[0] == "post"]
-    assert [c[1:3] for c in posts] == [(CHANNEL, DESK_TOPIC), (CHANNEL, DESK_TOPIC)]
-    delivered, handoff = posts[0][3], posts[1][3]
-    assert "goal was reached" in delivered and "commit a99625f" in delivered
-    assert f"#{RUN_CHANNEL} › `{RUN_TOPIC}`" in delivered and "selfnote" not in delivered
-    assert routine.parse_delivered(handoff) == Conversation(RUN_CHANNEL, RUN_TOPIC)
-    # The record at home carries the canonical block, and the run is resolved after it.
+    assert [c for c in calls if c[0] == "post"] == []
     record = replies(calls)[-1]
     assert record.startswith("Autolab reported") and '"schema": "ag.routinerun-finish.v1"' in record
+    assert "Routine run finished" not in record  # the report goes to the origin, from the record
     assert client.resolved == [RUN_TOPIC]
-    assert calls.index(("resolve", RUN_TOPIC, 12)) > max(i for i, c in enumerate(calls) if c[0] == "reply")
+    assert closed == [(RUN_CHANNEL, RUN_TOPIC)]
 
 
 def test_a_broken_finish_block_keeps_the_run_open(monkeypatch, tmp_path):
