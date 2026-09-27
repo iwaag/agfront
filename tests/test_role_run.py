@@ -35,7 +35,11 @@ def test_front_s_grant_is_reading_agentchat_and_agproject():
     assert "Write" in grant
     assert "rtschedule" not in grant
     assert "Bash(agrefs:*)" in grant
-    remaining = grant.replace("Bash(agentchat:*)", "").replace("Bash(agproject:*)", "")
+    # progress_panel p1: a routine run completed from the request's own
+    # conversation is ended on the record from there (`agrunfinish`).
+    assert "Bash(agrunfinish:*)" in grant
+    remaining = grant.replace("Bash(agentchat:*)", "").replace("Bash(agproject:*)", "") \
+        .replace("Bash(agrunfinish:*)", "")
     remaining = remaining.replace("Bash(agrefs:*)", "")
     assert "Bash(" not in remaining
 
