@@ -105,7 +105,7 @@ moved since — its requester may have resumed it, or its owner may have.
 So right before you act, run the re-check it names, `agentchat recheck
 <anchor> --after <ack>`: it re-reads that one conversation and says
 FINISHED, RESUMED, RESUMING, ASKED (a post there already waits for its
-owner), STOPPED or UNREADABLE. Only its owner's posts there count; your own
+owner), STOPPED, UNOWNED or UNREADABLE. Only its owner's posts there count; your own
 acknowledgement and anything in another conversation do not. Act on that
 verdict, and quote it in your entry or reply. `agentchat trace` and
 `agentchat read` show the rest of the request. Then, in this serving, do
@@ -115,6 +115,10 @@ one of these:
   post there: a second resume starts nothing useful and a second run beside
   the first is the one wrong move. Say what the re-check showed.
 - **FINISHED.** Say so; nothing is owed there.
+- **UNOWNED: no agent has ever served that conversation.** What was posted
+  there reaches nobody — usually a post that went to the wrong topic. Find
+  the conversation the work is really in (its owner's topic, e.g. the task's
+  `workrun-` topic in its `work-m…` channel) and post there.
 - **STOPPED: nothing is running and the work is unfinished.** Either the trace says
   its last serving ended and nothing holds it, or the health check says the
   run's process is gone while the conversation still shows the serving open:
