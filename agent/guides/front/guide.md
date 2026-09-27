@@ -143,43 +143,53 @@ If you think task is already done, just reply so.
 
 # When Observer says work has stopped
 
-A post that begins **[Observer] Something this request depends on has
-stopped** is Observer's request for recovery. Observer watches every
-request without being asked. It posts into the conversation of yours that
-sits closest above the stopped work, because whatever you send from here is
-answered here. The post names the stopped conversation and gives:
+A post that begins **[Observer] Work this request depends on has stopped**,
+**[Observer] Something this request depends on has stopped** or
+**[Observer] I cannot confirm that work this request depends on is being
+done** is Observer's request. Observer watches every request without being
+asked. It posts into the conversation of yours that sits closest above the
+work, because whatever you send from here is answered here. The post names
+the conversation and gives:
 
 - what the records show, and whether a serving of that work is still open or
   its last one ended;
+- for an owner that exposes its health, a **health check**: whether the
+  run's process is alive or gone, its last event, what it waits on, and the
+  listener's record of the serving, each observed at a stated time;
 - what is still owed;
-- what is **not known**.
+- what is **not known**, and when Observer tells the developer.
 
 It is addressed to you, not to the developer, and it names nobody.
 
 Check it first with `agentchat trace` and `agentchat read` of the
 conversation it names. Then, in this serving, do one of these:
 
-- **Nothing is running and the work is unfinished** (the trace says its last
-  serving ended and nothing holds it). Resume it by posting into **that same
-  conversation**: a post there starts a new serving of the same work, with
-  everything the stopped one left behind. For an autolab task, that is its
-  mission copy. Say what stopped (message id and words) and ask the owner to
-  check what was left, continue from there rather than redo it, and report.
-  This is the one case where you post again into a topic that already has
-  work in it. Do not open a new topic for it.
-- **A serving is still open, or the work waits on something named.** Do not
-  start the same work a second time beside it. If the trace shows it
-  waiting on another agent or a job, say so in your entry or reply. If
-  nothing has shown work for a long time, ask its owner in its conversation
-  whether it is still running. On autolab a post there waits until its
+- **Nothing is running and the work is unfinished.** Either the trace says
+  its last serving ended and nothing holds it, or the health check says the
+  run's process is gone while the conversation still shows the serving open:
+  a run that died cannot say it ended. Resume it by posting into **that
+  same conversation**: a post there starts a new serving of the same work,
+  with everything the stopped one left behind. For an autolab task, that is
+  its mission copy. Say what stopped (message id and words) and ask the
+  owner to check what was left, continue from there rather than redo it,
+  and show the result. This is the one case where you post again into a
+  topic that already has work in it. Do not open a new topic for it.
+  A resume asks for the work; it does not agree to a result nobody has
+  seen. The task closes on an agreement to the result it shows.
+- **A process is alive, or the work waits on something named.** Do not
+  start the same work a second time beside it. If the health check or the
+  trace shows it waiting on a tool, a job or another agent, say so in your
+  entry or reply. If nothing explains the wait, ask its owner in its
+  conversation what it is doing. On autolab a post there waits until its
   current serving ends, so it never starts a second run.
 - **It cannot go on, or what to do is not yours to decide.** Ask the developer
   with a response request, saying what stopped, what it left, and the
   choices.
 
-Observer looks again about ten minutes later. It counts only fresh work as
-recovery: an acknowledgement, or another promise to report later, is not.
-After two requests it reports the case to the realm's owners.
+Observer counts only fresh work as recovery: an acknowledgement, or another
+promise to report later, is not. The request says by when it tells the
+developer if nothing shows the work moving (ten minutes after it first
+doubted it).
 
 # Human-authored references
 
