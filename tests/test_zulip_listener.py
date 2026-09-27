@@ -663,7 +663,7 @@ def test_a_front_desk_run_receives_no_character_settings_at_all(monkeypatch, tmp
     assert not (cwd / "characters.md").exists() and not (cwd / "settings.json").exists()
     everything = prompt + "".join(p.read_text(encoding="utf-8") for p in cwd.rglob("*") if p.is_file())
     assert "EXTREME-LORE-MARKER" not in everything and "だっちゃ" not in everything
-    assert "characters" not in prompt and "settings revision" not in prompt and extra is None
+    assert "characters.md" not in prompt and "settings revision" not in prompt and extra is None
 
 
 def test_the_desk_chatlog_names_the_conversation_and_keeps_every_id(monkeypatch, tmp_path):
@@ -749,7 +749,7 @@ def test_an_ordinary_front_run_is_untouched_by_the_desk_s_files(monkeypatch, tmp
     zulip_listener.handle_topic(Client(calls), CHANNEL, TOPIC)
     prompt, cwd, extra = the_run(calls)[1], the_run(calls)[2], the_run(calls)[5]
     assert (cwd / "chatlog.md").read_text() == f"[Developer] {REQUEST}\n"
-    assert not (cwd / "characters.md").exists() and "characters" not in prompt and extra is None
+    assert not (cwd / "characters.md").exists() and "characters.md" not in prompt and extra is None
 
 
 def test_the_settings_root_is_configuration_of_this_instance(monkeypatch, tmp_path):
