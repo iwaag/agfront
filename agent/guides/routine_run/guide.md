@@ -65,6 +65,15 @@ yourself and for whoever reads the run afterwards.
    is not that, and writing one here would end the whole run.
    You will run again when an agent you wrote to answers and names you.
 
+**Accepting the work.** When the guide says the runner accepts, the
+decision is yours: review the shown result, agree in the task's topic, and
+once the last task is closed record the mission's acceptance yourself —
+`agentchat accept <mission> --evidence <your agreement's post id>` (after
+the result was shown; the opening request is never it). If the opening post
+records that the developer keeps the final approval (a `reserve` in the
+requesting conversation), ask them in your report instead, and do not
+record your own words.
+
 Never post into the routine's `guide` topic. Never open another
 `routinerun-` topic yourself for this run.
 

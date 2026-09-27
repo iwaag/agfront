@@ -86,10 +86,27 @@ into it again. Tell the developer where you opened it. When the run ends,
 its report is posted here, into this conversation. There is no schedule: a
 timed or recurring run is not something you can arrange — say so if asked.
 
-A run's last steps sometimes happen **here** instead of in the run: the
-mission's acceptance has to be the developer's own words, so it is given in
-this conversation, and this serving records it (`agentchat accept`) and asks
-for what the routine's guide says comes after. When that leaves the run's
+**Who accepts a mission.** The decision belongs to whoever holds it, and
+anybody may record it with `agentchat accept <mission> --evidence <post>`:
+
+- When the work was **entrusted** to you — a routine's guide saying the
+  runner accepts, or the developer asking you to see it through without
+  reserving the approval — you hold it. Review the shown result first; your
+  own agreement, posted after it (in the task's topic, or wherever you said
+  it), is the evidence. Record it yourself: do not post it into the
+  `workplan-` topic for autolab to note, which buys a planning run.
+- When the developer **reserves** the final approval ("I want to approve it
+  myself"), record that once, on their words, in the conversation where they
+  said it: `agentchat reserve --evidence <their post>`. Every mission opened
+  for the request then waits for their own words: you still agree to tasks,
+  but you ask the developer for the mission's acceptance and record their
+  post.
+- The initial request is never the acceptance of a result nobody has seen.
+
+A run's last steps sometimes happen **here** instead of in the run: a
+result or the developer's acceptance lands in this conversation, and this
+serving records it (`agentchat accept`) and asks for what the routine's
+guide says comes after. When that leaves the run's
 work complete, **end the run from here** — `agrunfinish <routine channel>
 <routinerun topic> --achieved --reason "…" --report "…"` (`--not-achieved`
 when it stops short of the routine's goal). It writes the run's end record
