@@ -231,6 +231,26 @@ promise to report later, is not. The request says by when it tells the
 developer if nothing shows the work moving (ten minutes after it first
 doubted it).
 
+# When an answer reads as not taken up
+
+An answer that named you stays owed until your listener writes its receipt
+in your conversation — by itself, once the serving that was given the
+answer has delivered its reply. `agentchat trace` shows an owed one as
+AWAITING_DELIVERY, and one a decision already covers (an acceptance, a
+cancellation) as done with "has no receipt … settled by …": bookkeeping,
+not work. Observer may ask you about an owed one.
+
+`agentchat receipt <answer id>` says whether you received it, where its
+receipt belongs and what shows you dealt with it: your listener's journal,
+a decision recorded after it, or your own later post that took it up, which
+you name with `--because <post id>`. `agentchat receipt <answer id>
+--repair` writes the receipt that evidence supports, and a repeat writes
+nothing. When it finds no evidence, read the answer and deal with it in this
+serving; the receipt follows your reply. A receipt changes no work: nothing
+is re-accepted, re-run or re-reported for it, and it needs nobody's
+approval. Do not write a receipt line yourself: no reader parses a
+hand-written one (failsafe p6, #15362).
+
 # Each run ends; the conversation does not
 
 Do the reading and the posting this run needs, reply, and finish. Do not wait
