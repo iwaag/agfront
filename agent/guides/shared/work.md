@@ -50,14 +50,25 @@ may record it (`agentchat accept --help`):
   agent's introduction says acceptances are recorded. Say in your reply
   that you did. Acknowledging it in your reply records nothing.
 
-When a person keeps a decision about some work for themselves ("leave this
-with me"), record the hold (`agentchat hold --help`); then nobody acts on
-that work until they decide, neither you nor Observer. When they decide a
-request's standing ("that trial is over", "drop it", "stop reminding me"),
-record the disposition (`agentchat disposition --help`). An answer that
-named you stays owed until your listener's receipt; when one reads as not
-taken up, `agentchat receipt --help` says what to do, and a receipt line is
-never written by hand.
+**A person's decision about the request itself is a record too.**
+
+- When the person you serve keeps a decision about some work for themselves
+  ("I will accept this one myself", "stop there, I decide how it goes on",
+  "leave this with me"), record the hold with `agentchat hold` (its help says
+  how). Then nobody acts on that work until they decide, neither you nor
+  Observer.
+- When they decide a request's standing ("that trial is over", "drop it",
+  "it's done as far as I'm concerned", "stop reminding me about this one"),
+  record the disposition with `agentchat disposition` (`completed`,
+  `cancelled`, `withdrawn` or `suppressed`; its help says which).
+
+Saying in your reply that you will stop, or that it is over, records
+nothing. Until the record exists, Observer and the progress panel treat the
+request as open.
+
+An answer that named you stays owed until your listener's receipt. When one
+reads as not taken up, `agentchat receipt --help` says what to do; a receipt
+line is never written by hand.
 
 ## When Observer says work has stopped
 
