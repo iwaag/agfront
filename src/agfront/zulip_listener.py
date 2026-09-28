@@ -206,6 +206,25 @@ def guide(*parts: str) -> str:
     return shared_guide(GUIDES, *parts)
 
 
+#: The files under `agent/guides/shared/` each conversational role reads after
+#: its own guide, in this order (`agent_guide` p1). A fact every role works
+#: under is written once there, not copied into each guide; a role's own
+#: guide says who it is, who it speaks with and what only it does.
+SHARED_GUIDES = {
+    DESK_ROLE: ("board.md", "requests.md", "work.md"),
+    FRONT_ROLE: ("board.md", "requests.md", "work.md"),
+    ROUTINE_ROLE: ("board.md", "work.md"),
+    "argue": ("board.md",),
+}
+
+
+def role_guide(role: str) -> str:
+    """The whole instruction a conversational role is given: its own guide,
+    then the shared files it reads. A missing shared file is as fatal as a
+    missing guide."""
+    return "\n\n".join([guide(role, "guide.md"), *(guide("shared", name) for name in SHARED_GUIDES.get(role, ()))])
+
+
 def role_for(channel: str, topic: str) -> str:
     """Which role serves this conversation: `desk` for a `front-desk-…`
     topic, the ordinary front for every other `front-*` one.
@@ -297,7 +316,7 @@ def front_prompt(
         lines.append(continuation)
     # The reply mark (`agag.reply`) and the carry-forward block
     # (`agag.continuation`), described once after the guide.
-    return prompt_with_guide(lines, guide(role, "guide.md"), reply=True, continuation=bool(continuation))
+    return prompt_with_guide(lines, role_guide(role), reply=True, continuation=bool(continuation))
 
 
 def run_front(

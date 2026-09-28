@@ -104,6 +104,9 @@ def wire(monkeypatch, tmp_path, calls, *, answer="on it"):
     guides = tmp_path / "guides"
     (guides / "argue").mkdir(parents=True, exist_ok=True)
     (guides / "argue" / "guide.md").write_text("ARGUE GUIDE")
+    (guides / "shared").mkdir(parents=True, exist_ok=True)
+    for name in ("board.md", "requests.md", "work.md"):
+        (guides / "shared" / name).write_text(f"SHARED {name}")
     monkeypatch.setattr(zulip_listener, "GUIDES", guides)
 
 

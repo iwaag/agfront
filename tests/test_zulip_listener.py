@@ -140,6 +140,9 @@ def wire(monkeypatch, tmp_path, calls, *, answer="on it", run=None):
     (guides / "front" / "guide.md").write_text("FRONT GUIDE")
     (guides / "desk").mkdir(parents=True)
     (guides / "desk" / "guide.md").write_text("DESK GUIDE")
+    (guides / "shared").mkdir(parents=True, exist_ok=True)
+    for name in ("board.md", "requests.md", "work.md"):
+        (guides / "shared" / name).write_text(f"SHARED {name}")
     monkeypatch.setattr(zulip_listener, "GUIDES", guides)
     # No character settings unless a test places some (`settings_at`).
     monkeypatch.setattr(agfront_settings, "settings_root", lambda: tmp_path / "no-settings")
@@ -195,12 +198,14 @@ def test_the_chatlog_and_the_prompt_are_the_run_s_whole_input(monkeypatch, tmp_p
         + "\n\n"
     )
     assert prompt.startswith(head)
-    # Then the continuation view (`agag.continuation`), the guide, and the
-    # two shared contracts — the reply mark and the carry-forward block.
+    # Then the continuation view (`agag.continuation`), the role's guide, the
+    # shared guide files it reads (`agent_guide` p1), and the two shared
+    # contracts — the reply mark and the carry-forward block.
     view, _, tail = prompt[len(head):].partition("\n\nFRONT GUIDE")
     assert view.startswith("How this conversation stands") and CONTINUATION_END in view
     assert f"[Developer #1] {REQUEST}" in view
-    assert tail == f"\n\n{REPLY_GUIDE}\n\n{CONTINUATION_GUIDE}"
+    shared = "".join(f"\n\nSHARED {name}" for name in zulip_listener.SHARED_GUIDES["front"])
+    assert tail == f"{shared}\n\n{REPLY_GUIDE}\n\n{CONTINUATION_GUIDE}"
     assert cwd == gen_dir(tmp_path, 1)
     # The same bytes are in the file and in the prompt: one rendering, one
     # snapshot, so a run cannot be shown two versions of one conversation

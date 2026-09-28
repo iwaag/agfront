@@ -123,6 +123,9 @@ def wire_runs(monkeypatch, tmp_path, calls, *, budget_source=None, **kw):
     guides = tmp_path / "guides"
     (guides / "routine_run").mkdir(parents=True, exist_ok=True)
     (guides / "routine_run" / "guide.md").write_text("RUN GUIDE")
+    (guides / "shared").mkdir(parents=True, exist_ok=True)
+    for name in ("board.md", "requests.md", "work.md"):
+        (guides / "shared" / name).write_text(f"SHARED {name}")
     monkeypatch.setenv("AGFRONT_BUDGET_URL", budget_source or str(tmp_path / "no-budget.json"))
 
 
