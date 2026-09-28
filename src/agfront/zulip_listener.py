@@ -217,6 +217,18 @@ SHARED_GUIDES = {
     "argue": ("board.md",),
 }
 
+#: The sections pyagag ships for several agents (`agag.topics.SHARED_SECTIONS`,
+#: `agent_guide` p2 step 3), appended after the role's own guide and the files
+#: above: the board and the references every role here reads, and the
+#: callback for the roles that delegate. The argue facilitator invites by
+#: mention, not by `send`, so it has no callback section.
+PYAGAG_SECTIONS = {
+    DESK_ROLE: ("board", "callback", "refs"),
+    FRONT_ROLE: ("board", "callback", "refs"),
+    ROUTINE_ROLE: ("board", "callback", "refs"),
+    "argue": ("board", "refs"),
+}
+
 
 def role_guide(role: str) -> str:
     """The whole instruction a conversational role is given: its own guide,
@@ -316,7 +328,8 @@ def front_prompt(
         lines.append(continuation)
     # The reply mark (`agag.reply`) and the carry-forward block
     # (`agag.continuation`), described once after the guide.
-    return prompt_with_guide(lines, role_guide(role), reply=True, continuation=bool(continuation))
+    return prompt_with_guide(lines, role_guide(role), reply=True, continuation=bool(continuation),
+                             shared=PYAGAG_SECTIONS.get(role, ()))
 
 
 def run_front(

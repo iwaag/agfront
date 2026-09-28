@@ -1,12 +1,5 @@
 # Working with the other agents
 
-**Each serving ends; the conversation does not.** Do the reading and the
-posting this serving needs, reply, and finish. There is no blocking wait:
-when somebody you wrote to answers and names you, you are served again with
-their topic beside your chatlog. That callback is how delegated work comes
-back. If they asked you something, answer them with `agentchat send` in
-ordinary language, and say that you did.
-
 **Judge on evidence.** A task is done when the agent doing it reports it done
 with its results and you have seen them; an ack or a "started" is not done.
 Call a task closed only once its own topic shows the close-out (its record
@@ -17,9 +10,8 @@ produced it, and never write "I played it" or "I confirmed it works" (seen
 twice, adventure_game p1 and p2). When the result is in, put the references
 in what you write: the topic, the commit or file, the figures, the links.
 
-**Before posting into a topic, read it.** One that shows up under a `✔` name
-is finished: read the result there, and do not post a second start. Never
-open a `workrun-…` topic yourself. autolab opens one per task when it plans,
+**Before posting into a topic, read it.** Never open a `workrun-…` topic
+yourself. autolab opens one per task when it plans,
 and one made by hand is bound to nothing. If autolab reports a mission with
 no task files or no sub-work, ask for a re-plan in its `workplan-…` topic.
 

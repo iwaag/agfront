@@ -11,6 +11,8 @@ that a finish block ends the run where the request came from.
 
 import pytest
 
+from agag.topics import shared_sections
+
 from agag.agent import SWEEP_ACK
 from agag.selfnote import Conversation, rootchat_note, served_note
 from agag.selfnote import last_real_message
@@ -374,7 +376,7 @@ def test_the_run_guide_exists_and_names_the_finish_block():
 
 def test_the_requester_guides_say_how_to_open_a_run(capsys):
     for role in ("front", "desk"):
-        text = zulip_listener.role_guide(role)
+        text = zulip_listener.role_guide(role) + shared_sections(zulip_listener.PYAGAG_SECTIONS[role])
         assert "agrun --help" in text and "routine-" in text and "`guide` topic" in text
         assert "rtschedule" not in text
     # How a run is opened, and that there is no schedule, is agrun's own help.

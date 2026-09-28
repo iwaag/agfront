@@ -25,6 +25,7 @@ import pytest
 from agag import topics
 from agag.continuation import CONTINUATION_GUIDE, END as CONTINUATION_END
 from agag.reply import REPLY_GUIDE
+from agag.topics import shared_sections
 from agag.topics import GuideError
 
 from agag import intro as agents_md
@@ -205,7 +206,9 @@ def test_the_chatlog_and_the_prompt_are_the_run_s_whole_input(monkeypatch, tmp_p
     assert view.startswith("How this conversation stands") and CONTINUATION_END in view
     assert f"[Developer #1] {REQUEST}" in view
     shared = "".join(f"\n\nSHARED {name}" for name in zulip_listener.SHARED_GUIDES["front"])
-    assert tail == f"{shared}\n\n{REPLY_GUIDE}\n\n{CONTINUATION_GUIDE}"
+    # pyagag's shared sections (agent_guide p2) follow agfront's own files.
+    sections = shared_sections(zulip_listener.PYAGAG_SECTIONS["front"])
+    assert tail == f"{shared}\n\n{sections}\n\n{REPLY_GUIDE}\n\n{CONTINUATION_GUIDE}"
     assert cwd == gen_dir(tmp_path, 1)
     # The same bytes are in the file and in the prompt: one rendering, one
     # snapshot, so a run cannot be shown two versions of one conversation
@@ -577,11 +580,17 @@ def test_a_front_desk_failure_names_its_role(monkeypatch, tmp_path):
     assert replies(calls)[-1] == "@**Developer**\n\nfailed during desk: desk run exited 1\n\n`ag-post intent=report`"
 
 
+def whole_instruction(role: str) -> str:
+    """What a role is told after its placement: agfront's own files, then
+    pyagag's shared sections (`agent_guide` p2 step 3)."""
+    return zulip_listener.role_guide(role) + "\n\n" + shared_sections(zulip_listener.PYAGAG_SECTIONS[role])
+
+
 def test_the_desk_guide_exists_and_carries_no_character():
     """The guide is read from disk per run; a missing one is a run with no
     instruction. Since `argue` p2 it defines no voice at all: the discussion
     is plain, and the scene is rendered afterwards by another role."""
-    text = zulip_listener.role_guide("desk")
+    text = whole_instruction("desk")
     assert "characters.md" not in text and "ag-dialogue" not in text and "lore" not in text
     assert "agentchat send" in text and "agentchat --help" in text
     assert "agentchat wait" not in text
@@ -593,7 +602,7 @@ def test_every_conversational_guide_says_where_the_board_is():
     Every conversational role is told what the developer assumes, that the
     board is Zulip reached by agentchat, and that reading is free."""
     for role in ("desk", "front", "routine_run", "argue"):
-        text = " ".join(zulip_listener.role_guide(role).split())
+        text = " ".join(whole_instruction(role).split())
         assert "yours to look up" in text, role
         assert "not the filesystem" in text, role
         assert "Reading costs nobody anything" in text, role

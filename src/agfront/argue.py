@@ -95,7 +95,8 @@ def argue_prompt(bot_name: str, conversation: str, anchor: Anchor | None, desire
     lines += ["", conversation]
     if continuation:
         lines += ["", continuation]
-    return prompt_with_guide(lines, front.role_guide(ARGUE_ROLE), reply=True, continuation=bool(continuation))
+    return prompt_with_guide(lines, front.role_guide(ARGUE_ROLE), reply=True, continuation=bool(continuation),
+                             shared=front.PYAGAG_SECTIONS[ARGUE_ROLE])
 
 
 def humans_of(client: ZulipClient) -> set[int]:
