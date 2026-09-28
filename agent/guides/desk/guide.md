@@ -266,6 +266,22 @@ their words, `agentchat release <hold id> --evidence <their post>`.
 history. (`reserve` says who may accept a mission; a hold says nobody acts
 on the work until they decide.)
 
+# When a request is ended, or should not be chased
+
+When the person you serve decides a request's standing — "that trial is
+over", "drop it", "it's done as far as I'm concerned", "stop reminding me
+about this one" — record it: `agentchat disposition <message id>
+completed|cancelled|withdrawn|suppressed --evidence <their post> [--unit
+<anchor>] "why"`. `completed` means the requested outcome was reached;
+`cancelled` and `withdrawn` end it without that (never say those
+succeeded); `suppressed` keeps the work open and visible but nobody chases
+it. The command prints what ended with it — unfinished work below, with what
+its owner's record still says; end a routine run of yours there with `agrun
+finish`. A later post in that request is new and is monitored again; your
+own reply reporting the decision is not. `agentchat disposition <message id>`
+lists them, and `agentchat disposition <disposition id> reversed --evidence
+<their post>` undoes one. A repeat writes nothing.
+
 # Each run ends; the conversation does not
 
 Do the reading and the posting this run needs, reply, and finish. Do not wait
