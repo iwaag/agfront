@@ -60,7 +60,7 @@ wheels = [
 [[package]]
 name = "pyagag"
 version = "0.1.0"
-source = { git = "https://github.com/iwaag/pyagag.git?branch=main#ea797e7f7baadc9614e5d24e732d9e771d823c41" }
+source = { git = "https://github.com/iwaag/pyagag.git?branch=main#5d4bc9cc9e363a14d8463ab7b21daf95ab2f980b" }
 
 [[package]]
 name = "pygments"
