@@ -14,6 +14,9 @@ pyagag's shared sections: p1's composition is `--guides-rev 447bb03
 reply, its verdict under the probe's rule, the run record's cost and the
 transcript's tool calls are written to `--out` (`outcome.json`, `reply.md`).
 
+`--replies <file>…` runs no model: each serving's run answers the next
+file's text (failsafe p7 reproduces run-0183's reply this way).
+
 A probe with a responder script (`delegate-answer`, `delegate-decision`) is
 a conversation: Front's `agentchat send` is recorded in the trial's own copy
 of the board and answered by the script, and the desk conversation is served
@@ -55,8 +58,10 @@ def main(argv: list[str] | None = None) -> int:
         workspace = newest(zulip_listener.TOPICS_ROOT / probe.channel / probe.topic, "*")
         return tool_calls(session_log(workspace / role)) if workspace is not None else []
 
-    if probe.script:
-        # Delegation probes: served again on each scripted callback.
+    if probe.script or probe.claims:
+        # Delegation probes: served again on each scripted callback; claim
+        # probes (failsafe p7): checked as the listener checks, and served
+        # again when a mismatch is written.
         return trial.converse(zulip_listener.serve, calls)
     board = client(trial.store)
     me = board.whoami()
