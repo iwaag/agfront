@@ -13,6 +13,11 @@ pyagag's shared sections: p1's composition is `--guides-rev 447bb03
 --no-shared`, the one before p1 `--guides-rev ba28e90^ --no-shared`. The
 reply, its verdict under the probe's rule, the run record's cost and the
 transcript's tool calls are written to `--out` (`outcome.json`, `reply.md`).
+
+A probe with a responder script (`delegate-answer`, `delegate-decision`) is
+a conversation: Front's `agentchat send` is recorded in the trial's own copy
+of the board and answered by the script, and the desk conversation is served
+again for each scripted callback (`Trial.converse`), until none comes.
 """
 
 from __future__ import annotations
@@ -44,17 +49,22 @@ def main(argv: list[str] | None = None) -> int:
     if not trial.shared:
         zulip_listener.PYAGAG_SECTIONS = {}
     probe = trial.probe
+    role = zulip_listener.role_for(probe.channel, probe.topic)
+
+    def calls() -> list[str]:
+        workspace = newest(zulip_listener.TOPICS_ROOT / probe.channel / probe.topic, "*")
+        return tool_calls(session_log(workspace / role)) if workspace is not None else []
+
+    if probe.script:
+        # Delegation probes: served again on each scripted callback.
+        return trial.converse(zulip_listener.serve, calls)
     board = client(trial.store)
     me = board.whoami()
     context = TopicContext(board, probe.channel, probe.topic, int(me["user_id"]), str(me["full_name"]),
                            history=probe_history(probe, board))
-    role = zulip_listener.role_for(probe.channel, probe.topic)
     with trial.session():
         result = zulip_listener.serve(context)
-    workspace = newest(zulip_listener.TOPICS_ROOT / probe.channel / probe.topic, "*")
-    transcript = session_log(workspace / role) if workspace is not None else None
-    return trial.finish(result.output or "", records=zulip_listener.RECORDS_ROOT / role, role=role,
-                        calls=tool_calls(transcript))
+    return trial.finish(result.output or "", records=zulip_listener.RECORDS_ROOT / role, role=role, calls=calls())
 
 
 if __name__ == "__main__":
