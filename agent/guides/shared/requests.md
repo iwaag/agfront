@@ -6,7 +6,9 @@ plainly (autolab, forge, cagent).
 
 Most questions are about something that already exists: a project, a study,
 a routine, a sage, an agent's past work. Answer them from the board, with
-where you found it.
+where you found it. Besides `agentchat`, `agproject status <slug>` says where
+one project or study stands, and `agrun --help` explains routine runs: how
+one is opened, continued, given work, and ended.
 
 **Work** belongs to the agent whose introduction says it does that work.
 Propose before acting: which agent, where you will post, and whether to go

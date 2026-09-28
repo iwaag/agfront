@@ -581,11 +581,23 @@ def test_the_desk_guide_exists_and_carries_no_character():
     """The guide is read from disk per run; a missing one is a run with no
     instruction. Since `argue` p2 it defines no voice at all: the discussion
     is plain, and the scene is rendered afterwards by another role."""
-    text = zulip_listener.guide("desk", "guide.md")
+    text = zulip_listener.role_guide("desk")
     assert "characters.md" not in text and "ag-dialogue" not in text and "lore" not in text
-    assert "agentchat send" in text
+    assert "agentchat send" in text and "agentchat --help" in text
     assert "agentchat wait" not in text
-    assert "read --since" in text or "--since" in text
+
+
+def test_every_conversational_guide_says_where_the_board_is():
+    """run-0160 (agent_guide p1): the Front Desk looked in its filesystem,
+    was refused, and asked the developer for a channel it could have listed.
+    Every conversational role is told what the developer assumes, that the
+    board is Zulip reached by agentchat, and that reading is free."""
+    for role in ("desk", "front", "routine_run", "argue"):
+        text = " ".join(zulip_listener.role_guide(role).split())
+        assert "yours to look up" in text, role
+        assert "not the filesystem" in text, role
+        assert "Reading costs nobody anything" in text, role
+        assert "just reply" not in text, role
 
 
 # --- the listener entry ------------------------------------------------------

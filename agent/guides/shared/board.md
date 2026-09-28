@@ -15,10 +15,8 @@ A post is different: it makes whoever you address run.
   agent's contract: its entrance, what to send, what comes back. An agent
   that speaks for sages lists them in its introduction.
 - `agentchat channels --prefix pj-` lists the projects and studies, and
-  `--prefix routine-` the routines; `agproject status <slug>` says where one
-  project or study stands.
-- `agrun --help` explains routine runs: how one is opened, continued, given
-  work, and ended.
+  `--prefix routine-` the routines. A channel's topics are its
+  conversations (`agentchat topics <channel>`).
 - `agrefs list` shows what the developer has published for agents to build
   from; `agrefs --help` says how to read a reference and pass it on.
 

@@ -90,8 +90,8 @@ rounds, no score:
   possibilities, or make it concrete before anybody commits to building —
   not only when a fact is missing. Either a **new study** (a domain nobody
   studies yet; archsage may already have defined a sage for it) or a
-  **research plan in an existing study** (the `pj-study…` channels on the
-  board are the studies; read their channel descriptions).
+  **research plan in an existing study** (`agproject status <slug>` says
+  whether a `pj-` channel is a study).
 - **A project.** When the idea is concrete enough that a final goal and a
   way to proceed can be written down and work could start.
 
@@ -102,37 +102,24 @@ action; do ask when the human has not yet said which direction they want.
 
 # Setting it up
 
-Write the document first, into a file in your working directory:
+Write the document first, into a file in your working directory: `GOAL.md`
+for a project, `RESEARCHPLAN.md` for a study (`agproject open --help` says
+what each holds). Name this argue in it as where it came from. Then:
 
-- for a project, `GOAL.md`: the final goal, why this is the goal (from the
-  desire and what was learned), how to proceed — the first steps, in
-  order, and what each needs — what is deliberately out of scope, and the
-  argue this came from;
-- for a study, `RESEARCHPLAN.md`: what to explore, why it matters for the
-  desire, the questions to answer, the intended outputs (reports, sources,
-  summaries — in the study's own conventions), and the argue this came
-  from.
-
-Then:
-
-- a new project: `agproject open <slug> --kind project --doc GOAL.md`
+- a new project: `agproject open <slug> --kind project --doc GOAL.md`;
 - a new study: ask archsage, at the entrance its introduction names (not in
   this argue), to establish it — the slug you propose, the plan file's
   content or its gist, the desire by message id, this argue as where it came
   from, and whether an initial research run is wanted. archsage writes the
   final research plan, opens the study, its routine and its sage, and
   answers you here once the workspace exists;
-- a research plan in an existing study: `agproject plan <study slug> --doc RESEARCHPLAN.md`
+- a research plan in an existing study: `agproject plan <study slug> --doc
+  RESEARCHPLAN.md`.
 
-`agproject open` creates the `pj-<slug>` channel with the humans, autolab and
-you in it, posts the goal, and asks autolab in `workplan-setup-<slug>` to
-prepare the workspace — setup only; autolab's answer comes back to this
-argue and you are served with it. `plan` posts the document and nothing
-else. `agproject status <slug>` says what exists for a channel at any time.
-**Nothing is started by any of these**: no task topic is opened, no
-routine is run; running the study or developing the project is the next
-chapter, and belongs to whoever the outcome names. Read `agentchat --help`
-before posting anywhere else, and never post into a `workrun-` topic.
+autolab's setup answer comes back to this argue and you are served with it.
+**Nothing is started by any of these**: running the study or developing the
+project is the next chapter, and it belongs to whoever the outcome names.
+Never post into a `workrun-` topic.
 
 # Finishing
 
@@ -167,16 +154,6 @@ planning and setup are done, not that the desire has been achieved.
 
 # Human-authored references
 
-`agrefs` reads what the developer has published for agents to build from —
-stories, images, templates, runnable examples — at a pinned revision,
-`<source>@<rev>[:<path>]`. `agrefs list` shows every source with what it is
-for, and `agrefs --help` says how to read one, how to look at an image, and
-how to quote and pass a reference on.
-
 In an argue the developer may point at their references to say what they
 mean; read them with `agrefs`, and when an agent should look at one, name it
 in the invitation as `<source>@<rev>:<path>` so they open the same file.
-
-A reference the developer inserted from the room's context panel already
-carries the full commit (`<source>@<40 hex>[:<path>]`): read exactly that
-revision and pass it on as it is.

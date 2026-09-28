@@ -9,6 +9,8 @@ starts what was left unstarted and re-serves nothing already answered, and
 that a finish block ends the run where the request came from.
 """
 
+import pytest
+
 from agag.agent import SWEEP_ACK
 from agag.selfnote import Conversation, rootchat_note, served_note
 from agag.selfnote import last_real_message
@@ -370,12 +372,17 @@ def test_the_run_guide_exists_and_names_the_finish_block():
     assert "agentchat wait" not in text
 
 
-def test_the_requester_guides_say_how_to_open_a_run():
+def test_the_requester_guides_say_how_to_open_a_run(capsys):
     for role in ("front", "desk"):
-        text = zulip_listener.guide(role, "guide.md")
-        assert "routinerun-" in text and "agentchat topics routine-" in text
-        assert "guide" in text and "schedule" in text  # says there is none
+        text = zulip_listener.role_guide(role)
+        assert "agrun --help" in text and "routine-" in text and "`guide` topic" in text
         assert "rtschedule" not in text
+    # How a run is opened, and that there is no schedule, is agrun's own help.
+    from agfront import agrun
+    with pytest.raises(SystemExit):
+        agrun.main(["--help"])
+    help_text = capsys.readouterr().out
+    assert "routinerun-" in help_text and "schedule" in help_text
 
 
 # --- a run honours the execution preference it was opened with (step4) -----

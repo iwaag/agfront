@@ -13,6 +13,8 @@ document while other roles are not.
 import json
 from pathlib import Path
 
+import pytest
+
 from agag.agent_config import load_config, resolve_role
 
 from agfront import budget, zulip_listener
@@ -134,12 +136,18 @@ def test_the_run_role_may_read_the_budget_and_nothing_else_new():
         assert "agbudget" not in resolve_role(config, overlay, role, check_available=False).allowed_tools
 
 
-def test_the_run_guide_reads_the_conditions_the_way_the_plan_says():
+def test_the_run_guide_reads_the_conditions_the_way_the_plan_says(capsys):
     text = zulip_listener.guide("routine_run", "guide.md")
-    assert "tools/budget.md" in text and "agbudget" in text
-    assert "consume N points from the start" in text
+    assert "tools/budget.md" in text and "agbudget --help" in text
     assert "failed or stale read" in text.lower()
     assert "achieved" in text and "reason" in text
+    # How a condition reads lives in the tool's own help (agent_guide p1).
+    from agfront import budget
+    with pytest.raises(SystemExit):
+        budget.main(["--help"])
+    help_text = " ".join(capsys.readouterr().out.split())
+    assert "consume N points from the start" in help_text
+    assert "failed or stale read" in help_text
 
 
 # --- matching a threshold to the pool an option consumes (step4) ----------
