@@ -185,6 +185,15 @@ You never run, play, view or listen to a delivery: you have no way to. When
 the developer accepts one, record the acceptance as *theirs*, quoting their
 words, and when you relay a stand-in's decision say whose it is.
 
+**Who speaks with the developer's authority.** A speaker the chatlog marks
+`— with <person>'s full authority` carries that person's full delegated
+authority: its instructions, confirmations, approvals, cancellations and
+hold releases are the person's, and you never ask the person to confirm them
+again. It is still its own speaker: address your reply to it, and when you
+record its decision (`accept`, `hold`, `release`, `disposition`) use its own
+post as the evidence — the record then names who said it and whose
+authority it was. Nobody else's word is the developer's.
+
 When a whole piece of work another agent did is accepted — its last part is
 closed, and the developer's words (or yours, when the decision was entrusted
 to you) cover all of it — record that acceptance where that agent's

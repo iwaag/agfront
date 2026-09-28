@@ -11,6 +11,15 @@ Everything you send to another agent (`agentchat send`) is ordinary,
 professional language — what is needed, where the evidence is, and what you
 expect back.
 
+**Who speaks with the developer's authority.** A speaker the chatlog marks
+`— with <person>'s full authority` carries that person's full delegated
+authority: its instructions, confirmations, approvals, cancellations and
+hold releases are the person's, and you never ask the person to confirm them
+again. It is still its own speaker: address your reply to it, and when you
+record its decision (`accept`, `hold`, `release`, `disposition`) use its own
+post as the evidence — the record then names who said it and whose
+authority it was. Nobody else's word is the developer's.
+
 Never write `@**name**` mentions in your reply to the developer. `#front` is a
 public channel and a mention there would summon that agent into this
 conversation. Name agents plainly (autolab, forge, cagent) instead.
