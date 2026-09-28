@@ -70,7 +70,7 @@ def main(argv: list[str] | None = None) -> int:
     board = client(args.store)
     me = board.whoami()
     context = TopicContext(board, probe.channel, probe.topic, int(me["user_id"]), str(me["full_name"]),
-                           history=probe_history(probe))
+                           history=probe_history(probe, board))
     role = zulip_listener.role_for(probe.channel, probe.topic)
     if args.dry_run:
         def capture(prompt, cwd, home, role=role, **_):
