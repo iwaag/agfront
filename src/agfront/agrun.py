@@ -168,22 +168,91 @@ def _conversation(value: str) -> Conversation:
     return found
 
 
+USAGE = """\
+`agrun`: Front's own routine runs — see them, continue them, adopt work into
+them, end them.
+
+A routine is a process guide kept on the board: one `routine-<name>` channel
+per routine, and the newest post in its `guide` topic is the whole guide.
+A run of it is a `routinerun-<id>` conversation in that channel, which you
+own and are served in as the `routine_run` role. It is opened by one post —
+`agentchat send routine-<name> routinerun-<id> "…"`, with a name that does not
+exist there yet (the UTC time is a good id) — carrying the request in the
+requester's own words, the execution and end conditions as you read them
+(a way of executing they asked for, in their words), the guide post you
+read (its message id), and the conversation the request came from. That one
+post is the start: the run is served after the reply that opened it, it does
+its own delegating, and its report comes back to the conversation that asked.
+There is no schedule: a timed or recurring run cannot be arranged.
+
+A run's last steps sometimes arrive in the conversation that asked for it
+instead of in the run: a result, or the requester's acceptance. An open run
+of yours is yours to move from there with the commands below; a post of yours
+into the run topic serves nothing, and a sentence saying it is complete ends
+nothing.
+
+    agrun status [<channel>/<topic>]
+    agrun continue <run channel> <run topic> --because <post id> [--note "…"]
+    agrun adopt <work channel> <work topic> --run <run channel>/<run topic>
+    agrun finish <run channel> <run topic> --achieved|--not-achieved --reason "…" --report "…"
+
+`agrun <command> --help` says what each one does."""
+
+STATUS_HELP = """\
+List the runs a conversation opened (default: the one you are serving) and
+where each one's end stands: open, ended with its report delivered, or ended
+with the close-out incomplete. The same list is written into a serving's
+workspace as `tools/runs.md`; this reads it again now. Writes nothing."""
+
+CONTINUE_HELP = """\
+Have your own run served again because of a post — an answer the run needs
+landed in the conversation that asked, or Observer says the run stopped and
+nothing else holds it. The run reads what arrived and decides its next step
+itself. It writes one start note into the run (the note its listener serves
+from), so the serving happens even across a restart; your own words posted
+there would serve nothing."""
+
+ADOPT_HELP = """\
+Move work for a run that was opened from the requesting conversation instead
+of from the run (a `workplan-` topic whose answers come back there, while the
+run holds nothing) under the run: its answers then serve the run. It moves
+your own root note in that topic and nothing else; nothing is inferred from
+topic names."""
+
+FINISH_HELP = """\
+End a run on the record, from wherever the last evidence arrived: when its
+work is complete by record (the mission accepted, and whatever the routine's
+guide asks after that recorded) or it cannot go on. It writes the run's end
+record, delivers the report to the conversation that asked and resolves the
+run — exactly what a run ending itself does. Run again after an
+interruption, it finishes what is missing and writes nothing twice.
+
+--achieved is whether the routine's goal was reached, not whether the run
+ended cleanly; --reason is why it ends. Until the end record exists, the run
+reads as open to everybody watching it."""
+
+
 def main(argv: list[str] | None = None, out=None) -> int:
     out = out or sys.stdout
-    parser = argparse.ArgumentParser(prog="agrun", description=__doc__.split("\n\n")[0])
+    raw = argparse.RawDescriptionHelpFormatter
+    parser = argparse.ArgumentParser(prog="agrun", formatter_class=raw, description=USAGE)
     commands = parser.add_subparsers(dest="command", required=True)
-    see = commands.add_parser("status", help="the runs a conversation opened and where each one's end stands")
+    see = commands.add_parser("status", help="the runs a conversation opened and where each one's end stands",
+                              formatter_class=raw, description=STATUS_HELP)
     see.add_argument("home", nargs="?", default=None, help="<channel>/<topic> (default: the conversation served)")
-    go = commands.add_parser("continue", help="have your own run served again, because of a post")
+    go = commands.add_parser("continue", help="have your own run served again, because of a post",
+                             formatter_class=raw, description=CONTINUE_HELP)
     go.add_argument("channel")
     go.add_argument("topic")
     go.add_argument("--because", type=int, required=True, help="the post that makes the run's next step due")
     go.add_argument("--note", default="", help="one line for the run's record: what arrived, what is next")
-    take = commands.add_parser("adopt", help="make work you opened elsewhere for this request answer to the run")
+    take = commands.add_parser("adopt", help="make work you opened elsewhere for this request answer to the run",
+                               formatter_class=raw, description=ADOPT_HELP)
     take.add_argument("channel")
     take.add_argument("topic")
     take.add_argument("--run", required=True, help="<run channel>/<run topic>")
-    end = commands.add_parser("finish", help="end a run on the record and deliver its report")
+    end = commands.add_parser("finish", help="end a run on the record and deliver its report",
+                              formatter_class=raw, description=FINISH_HELP)
     end.add_argument("channel")
     end.add_argument("topic")
     goal = end.add_mutually_exclusive_group(required=True)

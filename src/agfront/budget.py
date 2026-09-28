@@ -249,11 +249,46 @@ def write_budget_doc(directory: Path, source: str | None = None, *, observation:
 # --- the CLI -------------------------------------------------------------------
 
 
+HELP = """\
+Print how much of each harness's plan window is used right now — the
+observation a condition such as "until the 5-hour window is 50 % used" is
+judged against. A serving that may need it gets the same reading, taken when
+it began, as `tools/budget.md`; this reads it again, fresh.
+
+Each section names its **pool**: the provider account a harness spends. That
+is how a window is matched to an execution option (`agentchat options` prints
+the pool each option consumes). Name the window you judge: "until agy's usage
+exceeds 70 %" is about the pool the `agy` option consumes. An option whose pool
+is several names joined by `+` spends each of those accounts, so read every one
+of their sections and let the first to reach the threshold decide. A pool that
+is `unknown`, a `+` list with `unknown` in it, or a pool with no section at all
+cannot be matched: that condition is unobservable, not at 0.
+
+How a condition reads:
+
+- "until the window is N % used" means the current window's `percent used` has
+  reached N, whatever consumed it: other work on the same account counts, and
+  where the meter stood when the work began does not matter. Already at or
+  past N at the first look means the condition is met at the start.
+- "exceeds N" is strictly past N; "until N % used" is reaching N.
+- "consume N points from the start" is a different condition: the reading at
+  the start plus N. It needs the starting reading recorded; a reset in between
+  makes it ambiguous, and that is said rather than guessed.
+- A reset (the reset time passed, the percent dropped) neither ends nor
+  restarts a "reach N %" condition; it is still "the current window reaches N".
+- A failed or stale read says nothing about the condition: it is not reached
+  and it is not 0.
+- The condition is about the shared account window, not one run's own cost:
+  a run record's `cost_usd` is a different number entirely.
+- Reaching it is not a wall: start no new work, let what is in flight come
+  back, then end. Nothing promises a strict ceiling or an instant stop."""
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="agbudget",
-        description="Print how much of each harness's plan window is used right now — "
-                    "the observation a routine run judges its conditions against.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=HELP,
     )
     parser.add_argument("--json", action="store_true", help="print the raw ag.budget.v1 document")
     parser.add_argument("--source", default=None,
