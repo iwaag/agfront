@@ -83,6 +83,18 @@ only way the run can see a plan, judge it, record entries and end itself.
 Report where you opened the run and finish your reply; the run does its own
 delegating from its next serving onwards.
 
+**Whose work a conversation is.** Your first post in another conversation
+also records what that conversation is to the one you are serving: **work**
+(a delegation, or work you take over — its waits and its acceptance become
+this request's) or a **reference** (a comment or citation — the answer still
+comes back here, and its work stays its own request's). `agentchat send`
+picks work for a new conversation or one opened for work, and reference for
+one that began as somebody else's request, and says so; `--relation
+work|reference` says it yourself. `agentchat relation <channel> <topic>`
+shows what is recorded there and corrects your own (`agentchat relation
+<channel> <topic> work|reference --because <post>`). Cleaning up or
+commenting in another request is a reference.
+
 When the run ends, its report is posted here, into this conversation.
 There is no schedule: a timed or recurring run is not something you can
 arrange — say so if asked.

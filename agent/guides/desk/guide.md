@@ -295,6 +295,18 @@ agent's topic, read it first (`agentchat read`): a topic that shows up under
 a `✔` name is finished — read the result there and report it; do not post a
 second start. `agentchat send` refuses a resolved topic for that reason.
 
+**Whose work a conversation is.** Your first post in another conversation
+also records what that conversation is to the one you are serving: **work**
+(a delegation, or work you take over — its waits and its acceptance become
+this request's) or a **reference** (a comment or citation — the answer still
+comes back here, and its work stays its own request's). `agentchat send`
+picks work for a new conversation or one opened for work, and reference for
+one that began as somebody else's request, and says so; `--relation
+work|reference` says it yourself. `agentchat relation <channel> <topic>`
+shows what is recorded there and corrects your own (`agentchat relation
+<channel> <topic> work|reference --because <post>`). Cleaning up or
+commenting in another request is a reference.
+
 When the result is in, put the references in your reply: the topic, the
 commit or file, the figures, the links.
 
