@@ -682,6 +682,25 @@ def test_the_desk_chatlog_names_the_conversation_and_keeps_every_id(monkeypatch,
     assert "2 posts" in chatlog
 
 
+def test_the_desk_prompt_and_evidence_keep_the_proxys_authority_and_identity(monkeypatch, tmp_path):
+    """ex2 live: the desk uses evidence formatting, not format_chatlog."""
+    config = tmp_path / "people.toml"
+    config.write_text('[[proxy]]\nuser = 9\nname = "Omni Agent"\nfor = 8\nfor_name = "Developer"\n')
+    monkeypatch.setenv("AGAG_PEOPLE_CONFIG", str(config))
+    calls = []
+    wire(monkeypatch, tmp_path, calls)
+    history = [desk_message("Original request", id=5170),
+               {**desk_message("I authorize the trial", id=5171),
+                "sender_id": 9, "sender_full_name": "Omni Agent"}]
+    zulip_listener.handle_topic(Client(calls, history=history), CHANNEL, DESK_TOPIC)
+    prompt, cwd = the_run(calls)[1], the_run(calls)[2]
+    chatlog = (cwd / "chatlog.md").read_text(encoding="utf-8")
+    label = "[Omni Agent — with Developer's full authority #5171] sender 9"
+    assert label in chatlog and label in prompt
+    assert "[Developer #5170] sender 8" in chatlog
+    assert "[Developer #5171]" not in chatlog
+
+
 def test_a_callback_s_thread_carries_ids_and_says_when_it_is_resolved(monkeypatch, tmp_path):
     """The completion report is very often the post that resolves the topic:
     the thread is read under its ✔ name and the file says the conversation

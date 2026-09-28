@@ -27,6 +27,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from agag.people import speaker_label
 from agag.post import describe, parse_post
 from agag.selfnote import is_selfnote
 from agag.serving import note_input
@@ -77,7 +78,7 @@ def format_evidence(
     names = sender_names(messages)
     for message, content, own in shown:
         speaker = message.get("sender_full_name") or f"user{message.get('sender_id')}"
-        who = f"{speaker} (you)" if own else speaker
+        who = f"{speaker} (you)" if own else speaker_label(message.get("sender_id"), speaker)
         # What the post is for (`agag.post`) is said in its header; the
         # machine line itself is never shown, so no run learns to type it.
         parsed = parse_post(content)
