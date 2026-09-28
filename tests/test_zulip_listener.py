@@ -1074,3 +1074,13 @@ def test_the_reply_unusable_fault_breaks_n_servings_then_is_gone(tmp_path, monke
     from agag.reply import split_reply
 
     assert not split_reply(broken).ok and "hi" in broken
+
+
+def test_the_false_claim_fault_answers_once_with_its_text_and_runs_nothing(tmp_path, monkeypatch):
+    """failsafe p7 trial aid: created only by a person."""
+    fault = tmp_path / "false-claim"
+    monkeypatch.setattr(zulip_listener, "FALSE_CLAIM_FAULT", fault)
+    assert zulip_listener._false_claim() is None
+    fault.write_text("<ag-reply intent=report>\nReleased hold #1.\n</ag-reply>\n")
+    assert "Released hold #1." in zulip_listener._false_claim() and not fault.exists()
+    assert zulip_listener._false_claim() is None

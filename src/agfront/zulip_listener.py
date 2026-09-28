@@ -454,6 +454,11 @@ def serve(context) -> TopicResult:
     context.step = role
     home = (context.channel, context.topic)
     carried = conversation_context(chatlog)
+    claimed = _false_claim()
+    if claimed is not None:
+        # failsafe p7 trial fault: run-0183's shape — one turn, no tool
+        # call, a reply naming records nobody made. No model runs.
+        return TopicResult(output=claimed)
     output = run_front(
         front_prompt(context.bot_name, threads, front_dir, role, conversation=carried,
                      continuation=continuation_for(context, carried, snapshots)),
@@ -500,6 +505,23 @@ def _reply_unusable() -> bool:
         REPLY_UNUSABLE_FAULT.write_text(str(left - 1), encoding="utf-8")
     log(f"fault injected: this serving's reply mark is made unusable ({left - 1} more after it)")
     return True
+
+
+#: failsafe p7 trial fault, created only by a person: the next desk or front
+#: serving's run is not started, and its output is this file's text (a
+#: reply mark holding a claim of acts nobody recorded); used once. The
+#: listener's claim check then meets a false claim as run-0183 made one.
+FALSE_CLAIM_FAULT = SPEC.local / "faults" / "false-claim"
+
+
+def _false_claim() -> str | None:
+    try:
+        text = FALSE_CLAIM_FAULT.read_text(encoding="utf-8")
+        FALSE_CLAIM_FAULT.unlink()
+    except OSError:
+        return None
+    log("fault injected: this serving's run is replaced by the false-claim reply (no model runs)")
+    return text
 
 
 def _unusable(output: str) -> str:
