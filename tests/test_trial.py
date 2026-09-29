@@ -64,7 +64,9 @@ def test_a_delegation_is_answered_and_served_again(tmp_path, monkeypatch):
         environment = {**os.environ, **resolved.environment}
 
         def send(text):
-            subprocess.run(["agentchat", "send", "pj-growbox", "workplan-growbox-lights", text], env=environment,
+            # The running task's own topic: a door live autolab serves (a new
+            # workplan- topic would be a new mission; agent_guide p3 ex2).
+            subprocess.run(["agentchat", "send", "work-m20510", "workrun-task1-m20510", text], env=environment,
                            check=True, capture_output=True)
 
         if len(seen) == 1:
@@ -87,3 +89,4 @@ def test_a_delegation_is_answered_and_served_again(tmp_path, monkeypatch):
     assert not outcome["against"] and outcome["met"] == ["12 h"]
     assert "I need a decision" in seen[1] and "b41d0e7" in seen[2]
     assert any("12 h a day" in s for s in outcome["sends"])
+    assert [d["door"] for d in outcome["doors"]] == ["answer", "answer"]
